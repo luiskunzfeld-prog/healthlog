@@ -6,8 +6,8 @@
   "orientation": "portrait",
   "background_color": "#0A0806",
   "theme_color": "#0A0806",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "/healthlog/",
+  "scope": "/healthlog/",
   "icons": [
     {
       "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTIgMTkyIj48cmVjdCB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgcng9IjQyIiBmaWxsPSIjMEEwODA2Ii8+PHJlY3QgeD0iMjAiIHk9IjIwIiB3aWR0aD0iMTUyIiBoZWlnaHQ9IjE1MiIgcng9IjMyIiBmaWxsPSIjMTMxMDA4Ii8+PHRleHQgeD0iOTYiIHk9IjEyOCIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iOTAiIGZvbnQtd2VpZ2h0PSI0MDAiIGZpbGw9IiNDOEI4OUEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkg8L3RleHQ+PC9zdmc+",
