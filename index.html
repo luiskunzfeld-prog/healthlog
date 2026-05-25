@@ -1991,15 +1991,9 @@ function KalorienRechner({ settings, onSave, lastWeight, onUpdateSettings }) {
     return Math.round(bmr * act + goal);
   };
 
-  const goTo = (s) => {
-    // Beim Weiterblättern Daten in Settings speichern
-    if(s > step) onUpdateSettings({ sex, alter:+age||null, lastAct:act, lastGoal:goal });
-    if(s===3) { setStep(3); } // calc shown in render
-    else setStep(s);
-  };
+  const goTo = (s) => setStep(s); // Kein onUpdateSettings hier! Würde App re-rendern → State-Reset
 
   const STEP_LABELS = ['Körper', 'Aktivität', 'Ziel', 'Ergebnis'];
-  const canAdvance = [true, true, true, true][step];
   const result = step===3 ? calc() : null;
 
   // Quell-Hinweis für vorausgefüllte Felder
@@ -2011,14 +2005,14 @@ function KalorienRechner({ settings, onSave, lastWeight, onUpdateSettings }) {
 
   return (
     <div>
-      {/* Klickbare Fortschritts-Steps */}
+      {/* Klickbare Schritt-Tabs — alle direkt anwählbar */}
       <div style={{display:'flex',gap:4,marginBottom:16}}>
         {STEP_LABELS.map((l,i)=>(
           <button key={i}
-            onClick={()=>{ if(i<=step) setStep(i); }}
+            onClick={()=>setStep(i)}
             style={{flex:1,textAlign:'center',padding:'5px 0',
               fontSize:10,borderRadius:4,letterSpacing:0.4,
-              cursor:i<=step?'pointer':'default',border:'none',
+              cursor:'pointer',border:'none',
               background:i===step?`${C.accent}20`:i<step?`${C.success}14`:'transparent',
               color:i===step?C.accent:i<step?C.success:C.faint,
               outline:`1px solid ${i===step?C.accent:i<step?C.success:C.border}`}}>
@@ -2140,15 +2134,13 @@ function KalorienRechner({ settings, onSave, lastWeight, onUpdateSettings }) {
       <div style={{display:'flex',gap:8,marginTop:12}}>
         {step>0&&(
           <button style={{...ST.outbtn(C.muted),flex:1}}
-            onClick={()=>setStep(s=>s-1)}>
+            onClick={()=>goTo(step-1)}>
             ← Zurück
           </button>
         )}
         {step<3&&(
-          <button
-            style={{...ST.btn(canAdvance?C.accent:C.border),
-              flex:2,opacity:canAdvance?1:0.45,cursor:canAdvance?'pointer':'default'}}
-            onClick={()=>canAdvance&&goTo(step+1)}>
+          <button style={{...ST.btn(C.accent),flex:2}}
+            onClick={()=>goTo(step+1)}>
             {step===2?'Berechnen →':'Weiter →'}
           </button>
         )}
@@ -2988,7 +2980,7 @@ function App() {
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>{entries.length} Einträge · lokal gespeichert</span>
-          <span style={{color:C.faint}}>v3.8</span>
+          <span style={{color:C.faint}}>v3.9</span>
         </div>
       </header>
 
