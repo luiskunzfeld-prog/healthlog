@@ -2253,7 +2253,7 @@ function App() {
   }, []);
 
   const add = useCallback((type,data,date=toDay())=>{
-    setEntries(prev=>[{id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type,data},...prev]);
+    setEntries(prev=>[{id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type,data,createdAt:Date.now()},...prev]);
     setAF(null);
   },[]);
 
@@ -2286,13 +2286,66 @@ function App() {
   const todayHerz = todayEs.filter(e=>e.type==='herz').at(-1)?.data.bpm;
   const todayBP   = todayEs.filter(e=>e.type==='blutdruck').at(-1)?.data;
 
-  // Streak
-  const streak = useMemo(()=>{
-    const dates = new Set(entries.map(e=>e.date));
-    let count=0, d=new Date();
-    while(dates.has(d.toISOString().slice(0,10))) { count++; d.setDate(d.getDate()-1); }
-    return count;
-  },[entries]);
+  // ── Streak-Logik ───────────────────────────────────────────────────────────
+  // Nur Einträge zählen, die am selben Tag erstellt wurden wie ihr Datum
+  // (createdAt fehlt bei alten Einträgen → gelten als legitim)
+  const streakData = useMemo(()=>{
+    const save = settings.streakSave ?? { available: true, savedDate: null };
+
+    const legitDates = new Set();
+    entries.forEach(e=>{
+      if (!e.createdAt) {
+        legitDates.add(e.date); // Legacy-Eintrag: gilt immer
+      } else {
+        const createdDay = new Date(e.createdAt).toISOString().slice(0,10);
+        if (createdDay === e.date) legitDates.add(e.date);
+      }
+    });
+
+    const today = toDay();
+    const todayTracked = legitDates.has(today);
+
+    // Rückwärts zählen — bei ungetracktem Heute von gestern starten
+    let d = new Date(today+'T12:00:00');
+    if (!todayTracked) d.setDate(d.getDate()-1);
+
+    let count = 0;
+    while (true) {
+      const ds = d.toISOString().slice(0,10);
+      if (legitDates.has(ds)) {
+        count++;
+      } else if (save.savedDate === ds) {
+        // Shield hat diesen Tag gerettet — weiter zählen ohne count++
+      } else {
+        break;
+      }
+      d.setDate(d.getDate()-1);
+    }
+
+    // Ist die Streak gerade in Gefahr?
+    const yest = new Date(today+'T12:00:00'); yest.setDate(yest.getDate()-1);
+    const yesterdayStr = yest.toISOString().slice(0,10);
+    const atRisk = !todayTracked
+      && !legitDates.has(yesterdayStr)
+      && save.savedDate !== yesterdayStr
+      && count > 0;
+
+    return { count, atRisk, saveAvailable: save.available && !save.savedDate, todayTracked };
+  }, [entries, settings.streakSave]);
+
+  // Shield einsetzen — rettet den gestrigen Tag
+  const useStreakSave = useCallback(()=>{
+    const yest = new Date(); yest.setDate(yest.getDate()-1);
+    const yesterdayStr = yest.toISOString().slice(0,10);
+    setSettings(s=>({...s, streakSave:{ available:false, savedDate:yesterdayStr }}));
+  },[]);
+
+  // Wenn Streak auf 0 fällt und kein Shield aktiv → Shield zurücksetzen für nächste Streak
+  useEffect(()=>{
+    if (streakData.count === 0 && settings.streakSave?.savedDate) {
+      setSettings(s=>({...s, streakSave:{ available:true, savedDate:null }}));
+    }
+  }, [streakData.count]);
 
   // Filtered by range
   const filtered = useCallback(type=>{
@@ -2348,10 +2401,47 @@ function App() {
       <div style={{marginBottom:24}}>
         <div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Heute</div>
         <div style={{fontFamily:"'DM Serif Display',Georgia,serif",fontSize:22,fontWeight:400,lineHeight:1.25,marginBottom:6}}>{dayStr}</div>
-        <div style={{display:'flex',gap:10,alignItems:'center'}}>
+        <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
           <div style={{fontSize:12,color:C.muted}}>{todayEs.length} Einträge</div>
-          {streak>0&&<div style={ST.pill(C.accent)}>{streak} {streak===1?'Tag':'Tage'} Streak</div>}
+          {streakData.count>0&&(
+            <div style={ST.pill(C.accent)}>
+              🔥 {streakData.count} {streakData.count===1?'Tag':'Tage'} Streak
+              {settings.streakSave?.savedDate&&!streakData.saveAvailable&&
+                <span style={{marginLeft:4,opacity:0.6}}>🛡</span>}
+            </div>
+          )}
+          {streakData.saveAvailable&&!streakData.atRisk&&streakData.count>0&&(
+            <div style={{fontSize:10,color:C.success,display:'flex',alignItems:'center',gap:3}}>
+              🛡 Shield verfügbar
+            </div>
+          )}
         </div>
+        {/* ── Streak-Shield Banner ── */}
+        {streakData.atRisk&&streakData.saveAvailable&&(
+          <div style={{marginTop:12,background:`${C.danger}12`,border:`1px solid ${C.danger}30`,
+            borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
+            <div>
+              <div style={{fontSize:12,fontWeight:600,color:C.danger}}>⚠ Streak in Gefahr!</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:2,lineHeight:1.4}}>
+                Gestern nicht getrackt. Du hast noch einen 🛡 Shield — jetzt einsetzen?
+              </div>
+            </div>
+            <button onClick={useStreakSave}
+              style={{background:C.accent,color:C.bg,border:'none',borderRadius:8,
+                padding:'8px 12px',fontSize:12,fontWeight:700,cursor:'pointer',flexShrink:0,
+                whiteSpace:'nowrap'}}>
+              Retten!
+            </button>
+          </div>
+        )}
+        {streakData.atRisk&&!streakData.saveAvailable&&(
+          <div style={{marginTop:12,background:`${C.faint}80`,border:`1px solid ${C.border}`,
+            borderRadius:10,padding:'10px 14px'}}>
+            <div style={{fontSize:12,color:C.muted}}>
+              💔 Streak verloren — track heute um eine neue zu starten.
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Fortschrittsbalken ── */}
@@ -3237,7 +3327,7 @@ function App() {
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>{entries.length} Einträge · lokal gespeichert</span>
-          <span style={{color:C.faint}}>v4.3</span>
+          <span style={{color:C.faint}}>v4.4</span>
         </div>
       </header>
 
