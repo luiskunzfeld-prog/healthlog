@@ -2448,6 +2448,11 @@ function App() {
   const todayWtr = todayEs.filter(e=>e.type==='ernaehrung').reduce((s,e)=>s+(e.data.water||0),0);
   const todaySl  = todayEs.find(e=>e.type==='schlaf')?.data.hours;
   const todayKcal = todayEs.filter(e=>e.type==='ernaehrung').reduce((s,e)=>s+(e.data.calories||0),0);
+  const todayProt = todayEs.filter(e=>e.type==='ernaehrung').reduce((s,e)=>s+(e.data.protein||0),0);
+  const todayCarb = todayEs.filter(e=>e.type==='ernaehrung').reduce((s,e)=>s+(e.data.carbs||0),0);
+  const todayFat  = todayEs.filter(e=>e.type==='ernaehrung').reduce((s,e)=>s+(e.data.fat||0),0);
+  const todayFiber= todayEs.filter(e=>e.type==='ernaehrung').reduce((s,e)=>s+(e.data.fiber||0),0);
+  const todaySteps= todayEs.filter(e=>e.type==='schritte').reduce((s,e)=>s+(e.data.steps||0),0);
   const todayHerz = todayEs.filter(e=>e.type==='herz').at(-1)?.data.bpm;
   const todayBP   = todayEs.filter(e=>e.type==='blutdruck').at(-1)?.data;
 
@@ -2565,6 +2570,23 @@ function App() {
     const wtrGoal  = settings.wasserZiel||2000;
     const kcalPct  = Math.min(100,Math.round((todayKcal/kcalGoal)*100));
     const wtrPct   = Math.min(100,Math.round((todayWtr/wtrGoal)*100));
+
+    // Alle konfigurierten Ziele als Fortschrittsbalken
+    const allGoals = [
+      { label:'Kalorien', val:todayKcal, goal:settings.kalorienZiel||2000, unit:'kcal', clr:C.accent, always:true },
+      { label:'Wasser',   val:todayWtr,  goal:settings.wasserZiel||2000,   unit:'ml',   clr:C.water,  always:true },
+      { label:'Eiweiß',   val:+todayProt.toFixed(1), goal:settings.proteinZiel,    unit:'g',    clr:C.sport,  always:false },
+      { label:'Kohlenhydrate',val:+todayCarb.toFixed(1),goal:settings.kohlenhydrateZiel,unit:'g',clr:C.water,always:false },
+      { label:'Fett',     val:+todayFat.toFixed(1),  goal:settings.fettZiel,       unit:'g',    clr:C.mood,   always:false },
+      { label:'Ballaststoffe',val:+todayFiber.toFixed(1),goal:settings.ballaststoffeZiel,unit:'g',clr:C.success,always:false },
+      { label:'Sport',    val:todayS,    goal:settings.sportZiel,          unit:'min',  clr:C.sport,  always:false },
+      { label:'Schritte', val:todaySteps,goal:settings.schritteZiel,       unit:'Schr.',clr:C.steps,  always:false,
+        fmt:v=>v>0?v.toLocaleString('de-DE'):null },
+      { label:'Schlaf',   val:todaySl||0,goal:settings.schlafZiel,         unit:'Std',  clr:C.sleep,  always:false,
+        fmt:v=>v>0?v:null },
+    ].filter(g => g.always || (g.goal && g.goal > 0));
+
+    const pct = (val,goal) => Math.min(100, Math.round(((val||0)/goal)*100));
     return <>
       <div style={{marginBottom:20}}>
         <div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Heute</div>
@@ -2622,22 +2644,30 @@ function App() {
         )}
       </div>
 
-      {/* ── Fortschrittsbalken ── */}
-      <div style={ST.grid2}>
-        {[{label:'Kalorien',val:todayKcal,goal:kcalGoal,unit:'kcal',pct:kcalPct,clr:C.accent},
-          {label:'Wasser',  val:todayWtr, goal:wtrGoal, unit:'ml',  pct:wtrPct, clr:C.water}
-        ].map(p=>(
-          <div key={p.label} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:14}}>
-            <Bar color={p.clr}/>
-            <div style={{fontSize:9,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:4}}>{p.label}</div>
-            <div style={{fontSize:16,fontWeight:600,color:p.val>0?p.clr:C.faint,lineHeight:1.2}}>{p.val>0?p.val.toLocaleString('de-DE'):'—'}</div>
-            <div style={{fontSize:10,color:C.muted,marginBottom:6}}>/ {p.goal.toLocaleString('de-DE')} {p.unit}</div>
-            <div style={{height:4,background:C.border,borderRadius:2}}>
-              <div style={{width:p.pct+'%',height:'100%',background:p.clr,borderRadius:2,transition:'width .3s',maxWidth:'100%'}}/>
+      {/* ── Tagesziele Fortschritt ── */}
+      <div style={{...ST.card,padding:'14px 16px',marginBottom:12}}>
+        <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:14}}>Tagesziele</div>
+        {allGoals.map(g=>{
+          const p = pct(g.val, g.goal);
+          const displayVal = g.fmt ? g.fmt(g.val) : (g.val>0 ? g.val.toLocaleString('de-DE') : null);
+          return (
+            <div key={g.label} style={{marginBottom:12}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:4}}>
+                <span style={{fontSize:11,color:C.muted}}>{g.label}</span>
+                <span style={{fontSize:11,color:p>=100?C.success:displayVal?g.clr:C.faint,fontWeight:500}}>
+                  {displayVal??'—'} <span style={{color:C.faint,fontWeight:400}}>/ {g.goal.toLocaleString('de-DE')} {g.unit}</span>
+                </span>
+              </div>
+              <div style={{height:3,background:C.border,borderRadius:2}}>
+                <div style={{width:p+'%',height:'100%',borderRadius:2,
+                  background:p>=100?C.success:g.clr,transition:'width .4s'}}/>
+              </div>
             </div>
-            <div style={{fontSize:10,color:p.pct>=100?C.success:C.muted,marginTop:3,textAlign:'right'}}>{p.pct}%</div>
-          </div>
-        ))}
+          );
+        })}
+        <div style={{marginTop:4,fontSize:10,color:C.faint,textAlign:'right'}}>
+          Ziele anpassen → Profil
+        </div>
       </div>
 
       <div style={{...ST.grid2, gridTemplateColumns:'1fr 1fr 1fr'}}>
@@ -3495,15 +3525,71 @@ function App() {
 
             {/* ── Tagesziele ── */}
             <div style={ST.secttl}>Tagesziele</div>
-            <div style={ST.card}>
-              {[['Kalorienziel (kcal)','kalorienZiel',2000],['Wasserziel (ml)','wasserZiel',2000]].map(([l,k,def])=>(
-                <div key={k} style={{marginBottom:12}}>
-                  <label style={ST.lbl}>{l}</label>
-                  <input style={{...ST.inp,marginBottom:0}} type="number" inputMode="numeric"
-                    value={settings[k]||def}
-                    onChange={e=>setSettings(s=>({...s,[k]:+e.target.value||def}))}/>
+
+            {/* Ernährung */}
+            <div style={{...ST.card,marginBottom:8}}>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:12}}>Ernährung</div>
+              <div style={ST.grid2}>
+                {[
+                  ['Kalorien (kcal)', 'kalorienZiel', 2000, 'numeric'],
+                  ['Wasser (ml)',     'wasserZiel',   2000, 'numeric'],
+                  ['Eiweiß (g)',      'proteinZiel',  0,    'numeric'],
+                  ['Kohlenhydrate (g)','kohlenhydrateZiel',0,'numeric'],
+                  ['Fett (g)',        'fettZiel',     0,    'numeric'],
+                  ['Ballaststoffe (g)','ballaststoffeZiel',0,'numeric'],
+                ].map(([l,k,def,mode])=>(
+                  <div key={k}>
+                    <label style={ST.lbl}>{l}</label>
+                    <input style={{...ST.inp,marginBottom:0}} type="number" inputMode={mode}
+                      placeholder={def>0?String(def):'kein Ziel'}
+                      value={settings[k]||''}
+                      onChange={e=>setSettings(s=>({...s,[k]:+e.target.value||0}))}/>
+                  </div>
+                ))}
+              </div>
+              <div style={{fontSize:10,color:C.faint,marginTop:4,lineHeight:1.5}}>
+                0 = kein Ziel gesetzt, wird nicht im Dashboard angezeigt
+              </div>
+            </div>
+
+            {/* Aktivität */}
+            <div style={{...ST.card,marginBottom:8}}>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:12}}>Aktivität</div>
+              <div style={ST.grid2}>
+                {[
+                  ['Sport (Minuten)', 'sportZiel',    0, 'numeric'],
+                  ['Schritte',        'schritteZiel', 0, 'numeric'],
+                ].map(([l,k,def,mode])=>(
+                  <div key={k}>
+                    <label style={ST.lbl}>{l}</label>
+                    <input style={{...ST.inp,marginBottom:0}} type="number" inputMode={mode}
+                      placeholder="kein Ziel"
+                      value={settings[k]||''}
+                      onChange={e=>setSettings(s=>({...s,[k]:+e.target.value||0}))}/>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Schlaf */}
+            <div style={{...ST.card,marginBottom:8}}>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:12}}>Schlaf</div>
+              <div>
+                <label style={ST.lbl}>Schlafdauer (Stunden)</label>
+                <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:8}}>
+                  {[6,7,7.5,8,8.5,9].map(h=>(
+                    <button key={h} onClick={()=>setSettings(s=>({...s,schlafZiel:h}))}
+                      style={{padding:'5px 12px',borderRadius:6,fontSize:12,cursor:'pointer',
+                        border:`1px solid ${settings.schlafZiel===h?C.sleep:C.border}`,
+                        background:settings.schlafZiel===h?`${C.sleep}18`:'transparent',
+                        color:settings.schlafZiel===h?C.sleep:C.muted}}>{h} Std</button>
+                  ))}
                 </div>
-              ))}
+                <input style={{...ST.inp,marginBottom:0}} type="number" step="0.5" inputMode="decimal"
+                  placeholder="kein Ziel (z.B. 8)"
+                  value={settings.schlafZiel||''}
+                  onChange={e=>setSettings(s=>({...s,schlafZiel:+e.target.value||0}))}/>
+              </div>
             </div>
 
             {/* ── Datenschutz ── */}
