@@ -2296,12 +2296,10 @@ function App() {
 
     const legitDates = new Set();
     entries.forEach(e=>{
-      if (!e.createdAt) {
-        legitDates.add(e.date); // Legacy-Eintrag: gilt immer
-      } else {
-        const createdDay = new Date(e.createdAt).toISOString().slice(0,10);
-        if (createdDay === e.date) legitDates.add(e.date);
-      }
+      // Nur Einträge mit createdAt zählen — importierte/rückdatierte ohne createdAt nie
+      if (!e.createdAt) return;
+      const createdDay = new Date(e.createdAt).toISOString().slice(0,10);
+      if (createdDay === e.date) legitDates.add(e.date);
     });
 
     const today = toDay();
@@ -2411,42 +2409,42 @@ function App() {
         <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
           <div style={{fontSize:12,color:C.muted}}>{todayEs.length} Einträge</div>
           {streakData.count>0&&(
-            <div style={ST.pill(C.accent)}>
-              🔥 {streakData.count} {streakData.count===1?'Tag':'Tage'} Streak
-              {settings.streakSave?.savedDate&&!streakData.saveAvailable&&
-                <span style={{marginLeft:4,opacity:0.6}}>🛡</span>}
+            <div style={{display:'flex',alignItems:'center',gap:6,
+              background:`${C.accent}12`,border:`1px solid ${C.accent}30`,
+              borderRadius:6,padding:'3px 10px'}}>
+              <div style={{width:5,height:5,borderRadius:'50%',background:C.accent}}/>
+              <span style={{fontSize:12,color:C.accent,fontWeight:600,letterSpacing:0.2}}>
+                {streakData.count} {streakData.count===1?'Tag':'Tage'}
+              </span>
+              {settings.streakSave?.savedDate&&!streakData.saveAvailable&&(
+                <div style={{width:4,height:4,borderRadius:1,background:`${C.accent}60`,marginLeft:1}}/>
+              )}
             </div>
           )}
           {streakData.saveAvailable&&!streakData.atRisk&&streakData.count>0&&(
-            <div style={{fontSize:10,color:C.success,display:'flex',alignItems:'center',gap:3}}>
-              🛡 Shield verfügbar
-            </div>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:0.3}}>Shield verfügbar</div>
           )}
         </div>
         {/* ── Streak-Shield Banner ── */}
         {streakData.atRisk&&streakData.saveAvailable&&(
-          <div style={{marginTop:12,background:`${C.danger}12`,border:`1px solid ${C.danger}30`,
+          <div style={{marginTop:12,background:C.cardAlt,border:`1px solid ${C.border}`,
             borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
             <div>
-              <div style={{fontSize:12,fontWeight:600,color:C.danger}}>⚠ Streak in Gefahr!</div>
+              <div style={{fontSize:12,fontWeight:600,color:C.text}}>Streak in Gefahr</div>
               <div style={{fontSize:11,color:C.muted,marginTop:2,lineHeight:1.4}}>
-                Gestern nicht getrackt. Du hast noch einen 🛡 Shield — jetzt einsetzen?
+                Gestern nicht getrackt — Shield noch verfügbar.
               </div>
             </div>
             <button onClick={useStreakSave}
-              style={{background:C.accent,color:C.bg,border:'none',borderRadius:8,
-                padding:'8px 12px',fontSize:12,fontWeight:700,cursor:'pointer',flexShrink:0,
-                whiteSpace:'nowrap'}}>
-              Retten!
+              style={{background:'transparent',color:C.accent,border:`1px solid ${C.accent}`,borderRadius:7,
+                padding:'6px 14px',fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0,letterSpacing:0.2}}>
+              Retten
             </button>
           </div>
         )}
         {streakData.atRisk&&!streakData.saveAvailable&&(
-          <div style={{marginTop:12,background:`${C.faint}80`,border:`1px solid ${C.border}`,
-            borderRadius:10,padding:'10px 14px'}}>
-            <div style={{fontSize:12,color:C.muted}}>
-              💔 Streak verloren — track heute um eine neue zu starten.
-            </div>
+          <div style={{marginTop:10,fontSize:11,color:C.faint,letterSpacing:0.2}}>
+            Streak unterbrochen — heute tracken für einen Neustart.
           </div>
         )}
       </div>
@@ -3054,7 +3052,7 @@ function App() {
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>{entries.length} Einträge · lokal gespeichert</span>
-          <span style={{color:C.faint}}>v4.5</span>
+          <span style={{color:C.faint}}>v4.6</span>
         </div>
       </header>
 
