@@ -2121,10 +2121,13 @@ function KalorienRechner({ settings, onSave, lastWeight, onUpdateSettings }) {
 }
 
 
-// ── Sortierbare Chart-Liste (kompakt, ▲/▼-Buttons) ───────────────────────────
+// ── Sortierbare Chart-Liste (Drag & Drop + ▲/▼) ──────────────────────────────
 function SortableChartList({ initialOrder, defs, onSave, onCancel }) {
   const [localOrder, setLocalOrder] = useState([...initialOrder]);
-  const defMap = Object.fromEntries(defs.map(d=>[d.id,d]));
+  const [dragIdx,    setDragIdx]    = useState(null);
+  const [overIdx,    setOverIdx]    = useState(null);
+  const defMap   = Object.fromEntries(defs.map(d=>[d.id,d]));
+  const itemRefs = useRef({});
 
   const move = (idx, dir) => {
     const target = idx + dir;
@@ -2136,37 +2139,112 @@ function SortableChartList({ initialOrder, defs, onSave, onCancel }) {
     });
   };
 
+  const applyDrop = (from, to) => {
+    if (from === to || to === null) return;
+    setLocalOrder(prev => {
+      const next = [...prev];
+      const [removed] = next.splice(from, 1);
+      next.splice(to, 0, removed);
+      return next;
+    });
+  };
+
+  // ── Touch Drag ───────────────────────────────────────────────────────────
+  const touchState = useRef({ active: false, startY: 0 });
+
+  const onTouchStart = (e, idx) => {
+    touchState.current = { active: true, startY: e.touches[0].clientY };
+    setDragIdx(idx);
+    setOverIdx(idx);
+  };
+
+  const onTouchMove = (e, idx) => {
+    if (!touchState.current.active) return;
+    // Scroll des Seiten-Body verhindern während Drag
+    const touch = e.touches[0];
+    let hit = null;
+    for (const [id, el] of Object.entries(itemRefs.current)) {
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (touch.clientY >= r.top && touch.clientY <= r.bottom) {
+        hit = localOrder.indexOf(id);
+        break;
+      }
+    }
+    if (hit !== null && hit !== overIdx) setOverIdx(hit);
+  };
+
+  const onTouchEnd = (e, idx) => {
+    if (!touchState.current.active) return;
+    touchState.current.active = false;
+    applyDrop(dragIdx, overIdx);
+    setDragIdx(null);
+    setOverIdx(null);
+  };
+
   return (
     <div>
-      <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:8}}>
-        Reihenfolge anpassen
+      <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:10}}>
+        Ziehen oder ▲/▼ tippen
       </div>
+
       {localOrder.map((id, idx) => {
         const def = defMap[id];
         if (!def) return null;
-        const isFirst = idx === 0;
-        const isLast  = idx === localOrder.length - 1;
+        const isFirst    = idx === 0;
+        const isLast     = idx === localOrder.length - 1;
+        const isDragging = dragIdx === idx;
+        const dropAbove  = overIdx === idx && dragIdx !== null && dragIdx > idx;
+        const dropBelow  = overIdx === idx && dragIdx !== null && dragIdx < idx;
+
         return (
-          <div key={id} style={{display:'flex',alignItems:'center',gap:8,
-            padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
+          <div
+            key={id}
+            ref={el => { itemRefs.current[id] = el; }}
+            onTouchStart={e => onTouchStart(e, idx)}
+            onTouchMove={e => onTouchMove(e, idx)}
+            onTouchEnd={e => onTouchEnd(e, idx)}
+            style={{
+              display:'flex', alignItems:'center', gap:8,
+              padding:'8px 2px',
+              marginTop:  dropAbove ? 0 : 0,
+              borderTop:  dropAbove ? `2px solid ${C.accent}` : '2px solid transparent',
+              borderBottom: dropBelow ? `2px solid ${C.accent}` : `1px solid ${C.border}`,
+              background: isDragging ? `${def.color}18` : 'transparent',
+              opacity: isDragging ? 0.55 : 1,
+              transition: 'border-color 0.1s, background 0.1s, opacity 0.1s',
+              touchAction: 'none',
+              userSelect: 'none', WebkitUserSelect: 'none',
+            }}>
+
+            {/* Drag handle */}
+            <span style={{
+              fontSize:18, color:C.faint, flexShrink:0, lineHeight:1,
+              padding:'0 2px', cursor:'grab', touchAction:'none',
+            }}>⠿</span>
+
             <div style={{width:3,height:12,background:def.color,borderRadius:1,flexShrink:0}}/>
-            <span style={{flex:1,fontSize:13,color:C.text,lineHeight:1.2}}>
+
+            <span style={{flex:1,fontSize:13,color:C.text,lineHeight:1.2,pointerEvents:'none'}}>
               {def.title.split(' (')[0]}
             </span>
-            <button
-              onClick={()=>move(idx,-1)}
-              style={{background:'none',border:'none',padding:'4px 8px',
+
+            <button onClick={e=>{e.stopPropagation();move(idx,-1);}}
+              style={{background:'none',border:'none',padding:'6px 8px',
                 color:isFirst?C.faint:C.muted,fontSize:14,lineHeight:1,
-                cursor:isFirst?'default':'pointer',opacity:isFirst?0.3:1}}>▲</button>
-            <button
-              onClick={()=>move(idx,1)}
-              style={{background:'none',border:'none',padding:'4px 8px',
+                cursor:isFirst?'default':'pointer',opacity:isFirst?0.25:1,
+                touchAction:'auto',WebkitTapHighlightColor:'transparent'}}>▲</button>
+
+            <button onClick={e=>{e.stopPropagation();move(idx,1);}}
+              style={{background:'none',border:'none',padding:'6px 8px',
                 color:isLast?C.faint:C.muted,fontSize:14,lineHeight:1,
-                cursor:isLast?'default':'pointer',opacity:isLast?0.3:1}}>▼</button>
+                cursor:isLast?'default':'pointer',opacity:isLast?0.25:1,
+                touchAction:'auto',WebkitTapHighlightColor:'transparent'}}>▼</button>
           </div>
         );
       })}
-      <div style={{display:'flex',gap:8,marginTop:12}}>
+
+      <div style={{display:'flex',gap:8,marginTop:14}}>
         <button style={{...ST.outbtn(C.muted),flex:1,padding:10,fontSize:13}} onClick={onCancel}>
           Abbrechen
         </button>
@@ -2677,7 +2755,7 @@ function App() {
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>{entries.length} Einträge · lokal gespeichert</span>
-          <span style={{color:C.faint}}>v3.4</span>
+          <span style={{color:C.faint}}>v3.6</span>
         </div>
       </header>
 
