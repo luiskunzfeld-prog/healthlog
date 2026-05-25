@@ -2236,6 +2236,8 @@ function App() {
   const [settings,setSettings] = useState(()=>store.get('settings')||{height:175,kalorienZiel:2000,wasserZiel:2000,chartOrder:null,alter:null});
   const [activeForm,setAF]     = useState(null);
   const [range,setRange]       = useState('30d');
+  const [customFrom,setCF]     = useState('');
+  const [customTo,  setCT]     = useState('');
   const [editing,setEditing]   = useState(null);
   const [showKcalCalc,setShowKcalCalc] = useState(false);
 
@@ -2351,10 +2353,15 @@ function App() {
   const filtered = useCallback(type=>{
     const base = entries.filter(e=>e.type===type).sort((a,b)=>a.ts-b.ts);
     if (range==='all') return base;
+    if (range==='custom') {
+      const from = customFrom ? new Date(customFrom+'T00:00:00').getTime() : 0;
+      const to   = customTo   ? new Date(customTo+'T23:59:59').getTime()   : Date.now();
+      return base.filter(e=>e.ts>=from && e.ts<=to);
+    }
     const days={'7d':7,'30d':30,'3m':90,'1y':365}[range];
     const cut = Date.now()-days*864e5;
     return base.filter(e=>e.ts>=cut);
-  },[entries,range]);
+  },[entries,range,customFrom,customTo]);
 
   const gwE  = useMemo(()=>filtered('gewicht'),[filtered]);
   const spE  = useMemo(()=>{ const m={}; filtered('sport').forEach(e=>{m[e.date]=(m[e.date]||0)+(e.data.duration||0);}); return Object.entries(m).map(([d,v])=>({date:d,min:v})); },[filtered]);
@@ -2608,7 +2615,6 @@ function App() {
     const scAvg = scE.length?Math.round(scE.reduce((a,e)=>a+e.steps,0)/scE.length):null;
     const calAvg= calE.length?Math.round(calE.reduce((a,e)=>a+e.kcal,0)/calE.length):null;
 
-    // ── Diagramm-Definitionen ────────────────────────────────────────────────
     const CHART_DEFS = [
       { id:'gewicht',   title:'Gewichtsverlauf (kg)',        color:C.accent,  hasData:!!gwE.length },
       { id:'sport',     title:'Sportaktivität (Minuten)',    color:C.sport,   hasData:!!spE.length },
@@ -2623,11 +2629,9 @@ function App() {
     ];
 
     const DEFAULT_ORDER = CHART_DEFS.map(d=>d.id);
-    const [order,      setOrderLocal] = useState(()=>settings.chartOrder||DEFAULT_ORDER);
-    const [editMode,   setEditMode]   = useState(false);
-    const [verlaufMode,setVerlaufMode]= useState('charts');
+    const [order,    setOrderLocal] = useState(()=>settings.chartOrder||DEFAULT_ORDER);
+    const [editMode, setEditMode]   = useState(false);
 
-    // ── Einzelne Chart-Renderer ───────────────────────────────────────────────
     const renderChart = (id) => {
       switch(id) {
         case 'gewicht': return (
@@ -2681,8 +2685,7 @@ function App() {
           </ChartCard>
         );
         case 'kalorien': return (
-          <ChartCard key="kalorien" title="Kalorien aus Lebensmitteln (kcal)" color={C.accent} empty={!calE.length}
-            stat={calAvg?`Ø ${calAvg} kcal`:null}>
+          <ChartCard key="kalorien" title="Kalorien aus Lebensmitteln (kcal)" color={C.accent} empty={!calE.length} stat={calAvg?`Ø ${calAvg} kcal`:null}>
             <CJSChart type="bar" height={170} labels={calE.map(e=>fmtD(e.date))}
               datasets={[{label:'Kalorien (kcal)',data:calE.map(e=>e.kcal),color:C.accent}]}/>
             <div style={{marginTop:8,fontSize:11,color:C.muted}}>Nur aus gescannten / eingetragenen Produkten</div>
@@ -2734,294 +2737,13 @@ function App() {
       }
     };
 
-    // ── Tagebuch: Kategorie + Zeitraum → gefilterte Einträge ─────────────────
-    const [logCat,   setLogCat]   = useState('ernaehrung');
-    const [logRange, setLogRange] = useState('30d');
-    const [openEntry,setOpenEntry]= useState(null);
-
-    const LOG_CATS = [
-      {id:'alle',      label:'Alle',        color:C.accent},
-      ...Object.entries(METRICS).map(([id,m])=>({id,label:m.label,color:m.color})),
-    ];
-    const RANGES = [
-      {id:'7d',label:'7 Tage'},{id:'30d',label:'30 Tage'},
-      {id:'3m',label:'3 Mon.'},{id:'1j',label:'1 Jahr'},{id:'all',label:'Alles'},
-    ];
-
-    const logEntries = useMemo(()=>{
-      let es = logCat==='alle' ? entries : entries.filter(e=>e.type===logCat);
-      if (logRange!=='all') {
-        const days={'7d':7,'30d':30,'3m':90,'1j':365}[logRange];
-        if (days) { const cut=Date.now()-days*864e5; es=es.filter(e=>e.ts>=cut); }
-      }
-      return es;
-    },[entries,logCat,logRange]);
-
-    const logByDate = useMemo(()=>{
-      const map={};
-      logEntries.forEach(e=>{ if(!map[e.date])map[e.date]=[]; map[e.date].push(e); });
-      return Object.entries(map).sort(([a],[b])=>b.localeCompare(a));
-    },[logEntries]);
-
-    // Tages-Nährstoffzusammenfassung (nur Ernährung)
-    const kcalDay = es => es.filter(e=>e.type==='ernaehrung').reduce((s,e)=>s+(e.data.calories||0),0);
-    const macroDay = es => es.filter(e=>e.type==='ernaehrung').reduce((a,e)=>({
-      prot:a.prot+(e.data.protein||0), carbs:a.carbs+(e.data.carbs||0),
-      fat:a.fat+(e.data.fat||0), water:a.water+(e.data.water||0),
-    }),{prot:0,carbs:0,fat:0,water:0});
-
-    const entryDetail = e => {
-      const d=e.data;
-      const Val=({l,v,col})=>(
-        <div style={{background:C.bg,borderRadius:7,padding:'7px 10px'}}>
-          <div style={{fontSize:9,color:C.muted,letterSpacing:0.7,textTransform:'uppercase',marginBottom:2}}>{l}</div>
-          <div style={{fontSize:15,fontWeight:600,color:col||C.text}}>{v??'—'}</div>
-        </div>
-      );
-      const Grid=({items})=>(
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginTop:8}}>
-          {items.filter(Boolean).map(([l,v,col])=><Val key={l} l={l} v={v} col={col}/>)}
-        </div>
-      );
-      switch(e.type){
-        case 'ernaehrung': return(<>
-          {d.productName&&<div style={{fontSize:13,fontWeight:600,marginBottom:4}}>
-            {d.productName}{d.brand?<span style={{color:C.muted,fontWeight:400}}> · {d.brand}</span>:null}
-          </div>}
-          <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap'}}>
-            {d.mealTag&&<span style={{...ST.pill(C.water),fontSize:10}}>{d.mealTag}</span>}
-            {d.quantity&&<span style={{fontSize:11,color:C.muted}}>{d.quantity} {d.unit}</span>}
-          </div>
-          <div style={{borderRadius:8,overflow:'hidden',border:`1px solid ${C.border}`}}>
-            {[
-              ['Kalorien',      d.calories?(d.calories+' kcal'):null, C.accent, true],
-              ['Eiweiß',        d.protein ?(d.protein+' g'):null,     C.sport,  true],
-              ['Kohlenhydrate', d.carbs   ?(d.carbs+' g'):null,       C.water,  true],
-              d.sugar >0?['  davon Zucker',   d.sugar+' g',  C.muted,   false]:null,
-              ['Fett',          d.fat     ?(d.fat+' g'):null,         C.mood,   true],
-              d.satFat>0?['  ges. Fettsäuren',d.satFat+' g', C.muted,   false]:null,
-              d.fiber >0?['Ballaststoffe',    d.fiber+' g',  C.success, true]:null,
-              d.salt  >0?['Salz',             d.salt+' g',   C.muted,   true]:null,
-              d.water >0?['Wasser',           d.water+' ml', C.water,   true]:null,
-            ].filter(Boolean).map(([l,v,col,main],i,arr)=>v?(
-              <div key={l} style={{display:'flex',justifyContent:'space-between',
-                alignItems:'center',padding:`${main?8:5}px ${main?12:20}px`,
-                background:i%2===0?C.bg:C.card,
-                borderBottom:i<arr.length-1?`1px solid ${C.border}44`:'none'}}>
-                <span style={{fontSize:main?12:11,color:main?C.muted:C.faint}}>{l.trim()}</span>
-                <span style={{fontSize:main?14:12,fontWeight:main?600:400,color:col}}>{v}</span>
-              </div>
-            ):null)}
-          </div>
-          {d.note&&<div style={{fontSize:11,color:C.muted,marginTop:8}}>{d.note}</div>}
-        </>);
-        case 'schlaf': return(<>
-          <div style={{fontSize:28,fontWeight:700,color:C.sleep}}>
-            {d.hours}<span style={{fontSize:14,fontWeight:400,marginLeft:4}}>Std</span>
-          </div>
-          {d.quality!=null&&<div style={{fontSize:13,color:C.muted,marginTop:4}}>
-            Qualität {'★'.repeat(d.quality)}{'☆'.repeat(5-d.quality)}
-          </div>}
-          {d.note&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>{d.note}</div>}
-        </>);
-        case 'sport': return(<>
-          <div style={{fontSize:24,fontWeight:700,color:C.sport}}>
-            {d.duration}<span style={{fontSize:13,fontWeight:400,marginLeft:4}}>min</span>
-          </div>
-          <Grid items={[['Aktivität',d.sportType,C.text],['Intensität',d.intensity?(d.intensity+'/5'):null,C.sport]]}/>
-          {d.note&&<div style={{fontSize:11,color:C.muted,marginTop:8}}>{d.note}</div>}
-        </>);
-        case 'stimmung': return(
-          <Grid items={[['Stimmung',d.mood+'/10',C.mood],['Energie',d.energy+'/10',C.sport],['Stress',d.stress+'/10',C.danger]]}/>
-        );
-        case 'gewicht': return(<>
-          <div style={{fontSize:28,fontWeight:700,color:C.accent}}>
-            {d.weight}<span style={{fontSize:14,fontWeight:400,marginLeft:4}}>kg</span>
-          </div>
-          {d.bmi&&<div style={{fontSize:13,color:C.muted,marginTop:4}}>BMI {d.bmi}</div>}
-          {d.note&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>{d.note}</div>}
-        </>);
-        case 'schritte': return(
-          <div style={{fontSize:28,fontWeight:700,color:C.steps}}>
-            {(d.steps||0).toLocaleString('de-DE')}<span style={{fontSize:13,fontWeight:400,marginLeft:4}}>Schr.</span>
-          </div>
-        );
-        case 'herz': return(<>
-          <div style={{fontSize:28,fontWeight:700,color:C.heart}}>
-            {d.bpm}<span style={{fontSize:14,fontWeight:400,marginLeft:4}}>bpm</span>
-          </div>
-          <Grid items={[['Kontext',d.context,C.text],['Status',d.category,C.heart]]}/>
-          {d.note&&<div style={{fontSize:11,color:C.muted,marginTop:8}}>{d.note}</div>}
-        </>);
-        case 'blutdruck': return(<>
-          <div style={{fontSize:24,fontWeight:700,color:C.bp}}>
-            {d.sys}/{d.dia}<span style={{fontSize:13,fontWeight:400,marginLeft:4}}>mmHg</span>
-          </div>
-          <Grid items={[['Puls',d.pulse?(d.pulse+' bpm'):null,C.heart],['Status',d.classification,C.bp]]}/>
-          {d.note&&<div style={{fontSize:11,color:C.muted,marginTop:8}}>{d.note}</div>}
-        </>);
-        case 'koerpermass': return(<>
-          <Grid items={[
-            d.taille?['Taille',d.taille+' cm',C.mass]:null,
-            d.hufte ?['Hüfte', d.hufte+' cm', C.accent]:null,
-            d.brust ?['Brust', d.brust+' cm', C.muted]:null,
-            d.arm   ?['Arm',   d.arm+' cm',   C.muted]:null,
-            d.whr   ?['WHR',   d.whr,         d.whr<0.85?C.success:C.danger]:null,
-          ]}/>
-          {d.note&&<div style={{fontSize:11,color:C.muted,marginTop:8}}>{d.note}</div>}
-        </>);
-        default: return null;
-      }
-    };
-
-    const catColor = LOG_CATS.find(c=>c.id===logCat)?.color||C.accent;
-
-    const LogView = () => (<>
-      {/* 1. Kategorie wählen */}
-      <div style={{fontSize:10,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Kategorie</div>
-      <div style={{display:'flex',gap:6,marginBottom:16,overflowX:'auto',paddingBottom:4,WebkitOverflowScrolling:'touch'}}>
-        {LOG_CATS.map(c=>(
-          <button key={c.id} onClick={()=>{setLogCat(c.id);setOpenEntry(null);}}
-            style={{flexShrink:0,padding:'6px 14px',borderRadius:20,fontSize:12,cursor:'pointer',
-              fontWeight:logCat===c.id?600:400,
-              border:`1px solid ${logCat===c.id?c.color+'90':C.border}`,
-              background:logCat===c.id?`${c.color}18`:'transparent',
-              color:logCat===c.id?c.color:C.muted}}>
-            {c.label}
-          </button>
-        ))}
-      </div>
-
-      {/* 2. Zeitraum wählen */}
-      <div style={{fontSize:10,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Zeitraum</div>
-      <div style={{display:'flex',gap:6,marginBottom:20,flexWrap:'wrap'}}>
-        {RANGES.map(r=>(
-          <button key={r.id} onClick={()=>setLogRange(r.id)}
-            style={{...ST.rng(logRange===r.id)}}>
-            {r.label}
-          </button>
-        ))}
-      </div>
-
-      {/* 3. Einträge */}
-      {logByDate.length===0
-        ? <div style={{...ST.card,textAlign:'center',padding:36,color:C.muted,fontSize:13}}>
-            Keine Einträge im gewählten Zeitraum.
-          </div>
-        : logByDate.map(([date, es])=>{
-          const isEat = logCat==='ernaehrung' || (logCat==='alle' && es.some(e=>e.type==='ernaehrung'));
-          const macros = isEat ? macroDay(es) : null;
-          const kcal   = isEat ? kcalDay(es) : 0;
-
-          return (
-            <div key={date} style={{...ST.card,padding:0,overflow:'hidden',marginBottom:10}}>
-
-              {/* Datums-Kopf */}
-              <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,
-                background:`${catColor}06`,display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                <div>
-                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmtD(date)}</div>
-                  {/* Nutrition-Tagessumme */}
-                  {isEat && kcal>0 && (
-                    <div style={{display:'flex',gap:10,marginTop:4,flexWrap:'wrap'}}>
-                      <span style={{fontSize:11,color:C.accent,fontWeight:600}}>{kcal} kcal</span>
-                      {macros.prot>0&&<span style={{fontSize:11,color:C.sport}}>{macros.prot.toFixed(0)}g Eiw.</span>}
-                      {macros.carbs>0&&<span style={{fontSize:11,color:C.water}}>{macros.carbs.toFixed(0)}g KH</span>}
-                      {macros.fat>0&&<span style={{fontSize:11,color:C.mood}}>{macros.fat.toFixed(0)}g Fett</span>}
-                      {macros.water>0&&<span style={{fontSize:11,color:C.water}}>{macros.water} ml H₂O</span>}
-                    </div>
-                  )}
-                </div>
-                <span style={{fontSize:10,color:C.muted,marginTop:2}}>{es.length} Eintr.</span>
-              </div>
-
-              {/* Einzelne Einträge */}
-              {es.map(e=>{
-                const m = METRICS[e.type];
-                const isExpanded = openEntry===e.id;
-                // Bei Kategoriefilter Details direkt zeigen, bei "Alle" als Expand
-                const autoExpand = logCat!=='alle';
-                return (
-                  <div key={e.id} style={{
-                    borderBottom:`1px solid ${C.border}44`,
-                    padding:'12px 16px',
-                    background:isExpanded?`${m.color}05`:'transparent',
-                  }}>
-                    <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
-                      <div style={{width:3,borderRadius:2,background:m.color,flexShrink:0,
-                        alignSelf:'stretch',minHeight:24,marginTop:2}}/>
-                      <div style={{flex:1,minWidth:0}}>
-
-                        {/* Kopfzeile */}
-                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}>
-                          <div style={{flex:1,minWidth:0}}>
-                            {logCat==='alle'&&(
-                              <span style={{fontSize:10,color:m.color,fontWeight:600,
-                                textTransform:'uppercase',letterSpacing:0.5,display:'block',marginBottom:2}}>{m.label}</span>
-                            )}
-                            <div style={{fontSize:12,color:C.muted,overflow:'hidden',
-                              textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{preview(e)}</div>
-                          </div>
-                          <div style={{display:'flex',gap:4,flexShrink:0}}>
-                            {/* Details nur bei "Alle"-Modus als Toggle */}
-                            {logCat==='alle'&&(
-                              <button onClick={()=>setOpenEntry(isExpanded?null:e.id)}
-                                style={{padding:'3px 8px',borderRadius:6,fontSize:11,cursor:'pointer',
-                                  border:`1px solid ${isExpanded?m.color:C.border}`,
-                                  background:isExpanded?`${m.color}18`:'transparent',
-                                  color:isExpanded?m.color:C.muted}}>
-                                {isExpanded?'▲':'Details'}
-                              </button>
-                            )}
-                            <button onClick={()=>setEditing(e)}
-                              style={{padding:'3px 8px',borderRadius:6,fontSize:11,cursor:'pointer',
-                                border:`1px solid ${C.accent}44`,background:`${C.accent}0A`,color:C.accent}}>
-                              ✎
-                            </button>
-                            <button onClick={()=>del(e.id)}
-                              style={{padding:'3px 6px',borderRadius:6,fontSize:14,cursor:'pointer',
-                                border:'none',background:'transparent',color:C.faint}}>×</button>
-                          </div>
-                        </div>
-
-                        {/* Details: immer bei Kategorie-Filter, als Toggle bei "Alle" */}
-                        {(autoExpand||isExpanded)&&(
-                          <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}44`}}>
-                            {entryDetail(e)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })
-      }
-    </>);
-
-
-
     return <>
-      {/* View-Toggle: Diagramme / Tagebuch */}
-      <div style={{display:'flex',gap:6,marginBottom:16,alignItems:'center'}}>
-        <button onClick={()=>setVerlaufMode('charts')}
-          style={{...ST.rng(verlaufMode==='charts'),padding:'6px 14px'}}>
-          📈 Diagramme
-        </button>
-        <button onClick={()=>setVerlaufMode('log')}
-          style={{...ST.rng(verlaufMode==='log'),padding:'6px 14px'}}>
-          📋 Tagebuch
-        </button>
-      </div>
-
-      {/* ── DIAGRAMME ── */}
-      {verlaufMode==='charts'&&<>
-        <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
-          {['7d','30d','3m','1y','all'].map(r=>(
+      {/* ── Zeitraum-Filter ── */}
+      <div style={{marginBottom:16}}>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom: range==='custom'?10:0}}>
+          {['7d','30d','3m','1y','all','custom'].map(r=>(
             <button key={r} style={ST.rng(range===r)} onClick={()=>setRange(r)}>
-              {r==='7d'?'7 Tage':r==='30d'?'30 Tage':r==='3m'?'3 Mon.':r==='1y'?'1 Jahr':'Alles'}
+              {r==='7d'?'7 Tage':r==='30d'?'30 Tage':r==='3m'?'3 Mon.':r==='1y'?'1 Jahr':r==='all'?'Alles':'Von–Bis'}
             </button>
           ))}
           <button onClick={()=>setEditMode(e=>!e)}
@@ -3033,240 +2755,245 @@ function App() {
           </button>
         </div>
 
-        {editMode&&(
-          <div style={{...ST.card,marginBottom:16,padding:'12px 14px',overflowY:'visible'}}>
-            <SortableChartList
-              initialOrder={order}
-              defs={CHART_DEFS}
-              onSave={newOrder=>{
-                setOrderLocal(newOrder);
-                setSettings(s=>({...s,chartOrder:newOrder}));
-                setEditMode(false);
-              }}
-              onCancel={()=>setEditMode(false)}
-            />
+        {/* Benutzerdefinierter Datumsbereich */}
+        {range==='custom'&&(
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:10}}>
+            <div>
+              <label style={{...ST.lbl,marginBottom:4}}>Von</label>
+              <input type="date" max={customTo||toDay()} value={customFrom}
+                onChange={e=>setCF(e.target.value)}
+                style={{...ST.datePicker,marginBottom:0,fontSize:13}}/>
+            </div>
+            <div>
+              <label style={{...ST.lbl,marginBottom:4}}>Bis</label>
+              <input type="date" min={customFrom||undefined} max={toDay()} value={customTo}
+                onChange={e=>setCT(e.target.value)}
+                style={{...ST.datePicker,marginBottom:0,fontSize:13}}/>
+            </div>
           </div>
         )}
-        {order.map(id=>renderChart(id))}
-      </>}
+      </div>
 
-      {/* ── TAGEBUCH ── */}
-      {verlaufMode==='log'&&<LogView/>}
+      {editMode&&(
+        <div style={{...ST.card,marginBottom:16,padding:'12px 14px',overflowY:'visible'}}>
+          <SortableChartList
+            initialOrder={order}
+            defs={CHART_DEFS}
+            onSave={newOrder=>{
+              setOrderLocal(newOrder);
+              setSettings(s=>({...s,chartOrder:newOrder}));
+              setEditMode(false);
+            }}
+            onCancel={()=>setEditMode(false)}
+          />
+        </div>
+      )}
+      {order.map(id=>renderChart(id))}
     </>;
   }
 
-  // ── Tagebuch ───────────────────────────────────────────────────────────────
+
+
+  // ── Journal ────────────────────────────────────────────────────────────────
   function Tagebuch() {
-    const [selDate, setSelDate] = useState(toDay());
+    const [selDate,  setSelDate] = useState(toDay());
+    const [expanded, setExpanded]= useState(null);
 
     const goPrev = () => {
       const d = new Date(selDate+'T12:00:00'); d.setDate(d.getDate()-1);
-      setSelDate(d.toISOString().slice(0,10));
+      setSelDate(d.toISOString().slice(0,10)); setExpanded(null);
     };
     const goNext = () => {
       const d = new Date(selDate+'T12:00:00'); d.setDate(d.getDate()+1);
-      if (d.toISOString().slice(0,10) <= toDay()) setSelDate(d.toISOString().slice(0,10));
+      if (d.toISOString().slice(0,10) <= toDay()) { setSelDate(d.toISOString().slice(0,10)); setExpanded(null); }
     };
 
     const dayEs = useMemo(()=>
       entries.filter(e=>e.date===selDate).sort((a,b)=>a.ts-b.ts),
     [selDate, entries]);
 
-    const ernEs  = dayEs.filter(e=>e.type==='ernaehrung');
-    const kcalT  = ernEs.reduce((s,e)=>s+(e.data.calories||0),0);
-    const protT  = ernEs.reduce((s,e)=>s+(e.data.protein||0),0);
-    const carbT  = ernEs.reduce((s,e)=>s+(e.data.carbs||0),0);
-    const fatT   = ernEs.reduce((s,e)=>s+(e.data.fat||0),0);
-    const wtrT   = ernEs.reduce((s,e)=>s+(e.data.water||0),0);
-    const otherEs = dayEs.filter(e=>e.type!=='ernaehrung');
-
     const fmtLong = d => {
       try { return new Date(d+'T12:00:00').toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long',year:'numeric'}); }
       catch { return d; }
     };
 
-    const EntryActions = ({e}) => (
-      <div style={{display:'flex',gap:6,marginTop:10}}>
-        <button onClick={()=>setEditing(e)}
-          style={{fontSize:11,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 12px',cursor:'pointer'}}>
-          Bearbeiten
-        </button>
-        <button onClick={()=>{ if(confirm('Eintrag löschen?')) del(e.id); }}
-          style={{fontSize:11,color:C.danger,background:'none',border:`1px solid ${C.danger}30`,borderRadius:6,padding:'4px 12px',cursor:'pointer'}}>
-          Löschen
-        </button>
+    const mealIcon = {Frühstück:'🌅',Mittagessen:'☀️',Abendessen:'🌙',Snack:'🍎'};
+
+    const METRIC_LINES = {
+      gewicht:    d=>[`${d.weight} kg`,d.bmi?`BMI ${d.bmi}`:null,d.fat?`${d.fat}% Körperfett`:null],
+      sport:      d=>[`${d.sportType||'Sport'} · ${d.duration} min`,`Intensität ${d.intensity}/5`,d.calories?`${d.calories} kcal verbrannt`:null],
+      stimmung:   d=>[`😊 Stimmung ${d.mood}/10`,`⚡ Energie ${d.energy}/10`,`😤 Stress ${d.stress}/10`],
+      schlaf:     d=>{ const q=['','Sehr schlecht','Schlecht','Ok','Gut','Sehr gut']; return [`${d.hours} Std Schlaf`,`Qualität: ${q[d.quality]||d.quality}`]; },
+      schritte:   d=>[`${(d.steps||0).toLocaleString('de-DE')} Schritte`],
+      herz:       d=>[`${d.bpm} bpm`,d.context||null,d.category||null],
+      blutdruck:  d=>[`${d.sys}/${d.dia} mmHg`,d.pulse?`Puls: ${d.pulse} bpm`:null,d.classification||null],
+      koerpermass:d=>[d.taille?`Taille: ${d.taille} cm`:null,d.hufte?`Hüfte: ${d.hufte} cm`:null,d.brust?`Brust: ${d.brust} cm`:null,d.arm?`Arm: ${d.arm} cm`:null].filter(Boolean),
+    };
+    const METRIC_SUMMARY = {
+      gewicht:    es=>es.map(e=>`${e.data.weight} kg`).join(' · '),
+      sport:      es=>`${es.reduce((s,e)=>s+(e.data.duration||0),0)} min · ${[...new Set(es.map(e=>e.data.sportType))].filter(Boolean).join(', ')}`,
+      stimmung:   es=>`Stimmung Ø ${(es.reduce((s,e)=>s+(e.data.mood||0),0)/es.length).toFixed(1)}/10`,
+      schlaf:     es=>`${es[0]?.data.hours} Std Schlaf`,
+      schritte:   es=>`${es.reduce((s,e)=>s+(e.data.steps||0),0).toLocaleString('de-DE')} Schritte`,
+      herz:       es=>`${es.map(e=>e.data.bpm).join(', ')} bpm`,
+      blutdruck:  es=>`${es[0]?.data.sys}/${es[0]?.data.dia} mmHg`,
+      koerpermass:es=>{ const d=es[0]?.data; return [d?.taille?`Taille ${d.taille}cm`:null,d?.hufte?`Hüfte ${d.hufte}cm`:null,d?.whr?`WHR ${d.whr}`:null].filter(Boolean).join(' · ')||'Maße eingetragen'; },
+    };
+
+    const EditDel = ({e}) => (
+      <div style={{display:'flex',gap:5,marginTop:8}}>
+        <button onClick={()=>setEditing(e)} style={{fontSize:10,color:C.muted,background:'none',
+          border:`1px solid ${C.border}`,borderRadius:5,padding:'3px 8px',cursor:'pointer'}}>Bearbeiten</button>
+        <button onClick={()=>{if(confirm('Löschen?'))del(e.id);}} style={{fontSize:10,color:C.danger,background:'none',
+          border:`1px solid ${C.danger}30`,borderRadius:5,padding:'3px 8px',cursor:'pointer'}}>Löschen</button>
       </div>
     );
 
-    const mealLabels = {Frühstück:'🌅',Mittagessen:'☀️',Abendessen:'🌙',Snack:'🍎'};
+    const sections = useMemo(()=>{
+      const secs=[];
 
-    return <>
-      {/* ── Datums-Navigation ── */}
-      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-        <button onClick={goPrev}
-          style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,width:40,height:40,
-            display:'flex',alignItems:'center',justifyContent:'center',
-            color:C.accent,fontSize:20,cursor:'pointer',flexShrink:0}}>‹</button>
-        <input type="date" max={toDay()} value={selDate}
-          onChange={e=>setSelDate(e.target.value)}
-          style={{...ST.datePicker,marginBottom:0,flex:1,textAlign:'center'}}/>
-        <button onClick={goNext}
-          style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,width:40,height:40,
-            display:'flex',alignItems:'center',justifyContent:'center',
-            color:selDate>=toDay()?C.faint:C.accent,fontSize:20,cursor:'pointer',flexShrink:0}}
-          disabled={selDate>=toDay()}>›</button>
-      </div>
-      <div style={{fontSize:12,color:C.muted,textAlign:'center',marginBottom:20,letterSpacing:0.2}}>
-        {fmtLong(selDate)}
-      </div>
+      // ── Ernährung ──
+      const ernEs = dayEs.filter(e=>e.type==='ernaehrung');
+      if (ernEs.length) {
+        const kcal=ernEs.reduce((s,e)=>s+(e.data.calories||0),0);
+        const prot=ernEs.reduce((s,e)=>s+(e.data.protein||0),0);
+        const carb=ernEs.reduce((s,e)=>s+(e.data.carbs||0),0);
+        const fat =ernEs.reduce((s,e)=>s+(e.data.fat||0),0);
+        const wtr =ernEs.reduce((s,e)=>s+(e.data.water||0),0);
+        const foodEs =ernEs.filter(e=>e.data.calories>0||e.data.productName);
+        const waterEs=ernEs.filter(e=>e.data.water>0&&!e.data.productName);
 
-      {dayEs.length===0 ? (
-        <div style={{textAlign:'center',padding:'60px 0 40px'}}>
-          <div style={{fontSize:36,marginBottom:14}}>📅</div>
-          <div style={{fontSize:14,color:C.muted}}>Keine Einträge an diesem Tag</div>
-          <div style={{fontSize:11,color:C.faint,marginTop:6}}>Wähle ein anderes Datum oder füge Einträge hinzu</div>
-        </div>
-      ):<>
-
-        {/* ── Quick Summary Pills ── */}
-        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:18}}>
-          <div style={ST.pill(C.accent)}>{dayEs.length} {dayEs.length===1?'Eintrag':'Einträge'}</div>
-          {kcalT>0 && <div style={ST.pill(C.water)}>{kcalT} kcal</div>}
-          {wtrT>0  && <div style={ST.pill(C.water)}>💧 {wtrT} ml</div>}
-        </div>
-
-        {/* ── Ernährung ── */}
-        {ernEs.length>0&&<>
-          <div style={ST.secttl}>Ernährung</div>
-
-          {/* Makro-Tagesübersicht */}
-          {kcalT>0&&<div style={{...ST.card,marginBottom:12}}>
-            <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:12}}>
-              Tagessumme
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:4,textAlign:'center'}}>
-              {[['Kalorien',kcalT,'kcal',C.accent],
-                ['Eiweiß',+protT.toFixed(1),'g',C.sport],
-                ['Kohlenhydr.',+carbT.toFixed(1),'g',C.water],
-                ['Fett',+fatT.toFixed(1),'g',C.mood],
-              ].map(([l,v,u,c])=>(
-                <div key={l} style={{background:C.cardAlt,borderRadius:8,padding:'10px 4px'}}>
-                  <div style={{fontSize:15,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
-                  <div style={{fontSize:9,color:C.muted,marginTop:2}}>{u}</div>
-                  <div style={{fontSize:8,color:C.faint,letterSpacing:0.5,marginTop:1,textTransform:'uppercase'}}>{l}</div>
+        secs.push({
+          key:'ernaehrung', label:'Ernährung', color:C.water, count:ernEs.length,
+          summary:[kcal>0&&`${kcal} kcal`,prot>0&&`${prot.toFixed(0)}g Eiweiß`,wtr>0&&`💧 ${wtr} ml`].filter(Boolean).join(' · '),
+          detail: ()=><>
+            {kcal>0&&<div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:14}}>
+              {[['Kcal',kcal,'',C.accent],['Eiweiß',+prot.toFixed(1),'g',C.sport],
+                ['KH',+carb.toFixed(1),'g',C.water],['Fett',+fat.toFixed(1),'g',C.mood]].map(([l,v,u,c])=>(
+                <div key={l} style={{background:C.card,borderRadius:8,padding:'8px 4px',textAlign:'center'}}>
+                  <div style={{fontSize:14,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
+                  <div style={{fontSize:9,color:C.muted,marginTop:1}}>{u||'kcal'}</div>
+                  <div style={{fontSize:8,color:C.faint,letterSpacing:0.4,textTransform:'uppercase'}}>{l}</div>
                 </div>
               ))}
-            </div>
-            {wtrT>0&&<div style={{marginTop:10,fontSize:12,color:C.water,display:'flex',alignItems:'center',gap:6}}>
-              <span>💧</span><span>{wtrT} ml Wasser</span>
             </div>}
-            {settings.kalorienZiel&&<>
-              <div style={{height:4,background:C.border,borderRadius:2,marginTop:10}}>
-                <div style={{width:Math.min(100,Math.round(kcalT/settings.kalorienZiel*100))+'%',
-                  height:'100%',background:C.accent,borderRadius:2,transition:'width .3s'}}/>
+            {settings.kalorienZiel&&kcal>0&&<>
+              <div style={{height:3,background:C.border,borderRadius:2,marginBottom:3}}>
+                <div style={{width:Math.min(100,Math.round(kcal/settings.kalorienZiel*100))+'%',height:'100%',background:C.accent,borderRadius:2}}/>
               </div>
-              <div style={{fontSize:10,color:C.muted,marginTop:3,textAlign:'right'}}>
-                {Math.round(kcalT/settings.kalorienZiel*100)}% von {settings.kalorienZiel} kcal Tagesziel
+              <div style={{fontSize:10,color:C.muted,marginBottom:12,textAlign:'right'}}>
+                {Math.round(kcal/settings.kalorienZiel*100)}% von {settings.kalorienZiel} kcal Tagesziel
               </div>
             </>}
-          </div>}
-
-          {/* Einzelne Mahlzeiten */}
-          {ernEs.map(e=>{
-            const d=e.data;
-            const isWater = !d.productName && d.water>0;
-            const name = d.productName || (isWater?'Wasser':'Manuell eingetragen');
-            const hasMacros = (d.protein||0)+(d.carbs||0)+(d.fat||0) > 0;
-            return <div key={e.id} style={{...ST.card,marginBottom:6,padding:'12px 14px'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:600,color:C.text,
-                    overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                    {d.mealTag&&<span style={{marginRight:6}}>{mealLabels[d.mealTag]||''}</span>}
-                    {name}
-                  </div>
-                  {d.brand&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{d.brand}</div>}
-                  {d.quantity&&<div style={{fontSize:10,color:C.faint,marginTop:2}}>{d.quantity} {d.unit}</div>}
+            {['Frühstück','Mittagessen','Abendessen','Snack',''].map(tag=>{
+              const grp=foodEs.filter(e=>(e.data.mealTag||'')===tag);
+              if(!grp.length) return null;
+              const gKcal=grp.reduce((s,e)=>s+(e.data.calories||0),0);
+              return <div key={tag||'_'} style={{marginBottom:14}}>
+                <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',
+                  marginBottom:6,display:'flex',justifyContent:'space-between'}}>
+                  <span>{mealIcon[tag]||'🍽'} {tag||'Sonstiges'}</span>
+                  {gKcal>0&&<span style={{color:C.accent}}>{gKcal} kcal</span>}
                 </div>
-                {d.calories>0&&<div style={{fontSize:15,fontWeight:700,color:C.accent,flexShrink:0}}>
-                  {d.calories} kcal
-                </div>}
-              </div>
-              {hasMacros&&<div style={{display:'flex',gap:10,marginTop:8,paddingTop:8,
-                borderTop:`1px solid ${C.border}44`,flexWrap:'wrap'}}>
-                {d.protein>0&&<div style={{fontSize:11}}>
-                  <span style={{color:C.sport,fontWeight:600}}>{d.protein}g</span>
-                  <span style={{color:C.faint,marginLeft:2}}>Eiweiß</span>
-                </div>}
-                {d.carbs>0&&<div style={{fontSize:11}}>
-                  <span style={{color:C.water,fontWeight:600}}>{d.carbs}g</span>
-                  <span style={{color:C.faint,marginLeft:2}}>KH</span>
-                </div>}
-                {d.fat>0&&<div style={{fontSize:11}}>
-                  <span style={{color:C.mood,fontWeight:600}}>{d.fat}g</span>
-                  <span style={{color:C.faint,marginLeft:2}}>Fett</span>
-                </div>}
-                {d.fiber>0&&<div style={{fontSize:11}}>
-                  <span style={{color:C.success,fontWeight:600}}>{d.fiber}g</span>
-                  <span style={{color:C.faint,marginLeft:2}}>Ballaststoffe</span>
-                </div>}
-              </div>}
-              {d.water>0&&!hasMacros&&<div style={{fontSize:11,color:C.water,marginTop:6}}>
-                💧 {d.water} ml
-              </div>}
-              {d.note&&<div style={{fontSize:11,color:C.muted,marginTop:6,fontStyle:'italic',lineHeight:1.4}}>
-                {d.note}
-              </div>}
-              <EntryActions e={e}/>
-            </div>;
-          })}
-        </>}
-
-        {/* ── Alle anderen Metriken ── */}
-        {Object.entries(METRICS).filter(([key])=>key!=='ernaehrung').map(([key,m])=>{
-          const mes = otherEs.filter(e=>e.type===key);
-          if (!mes.length) return null;
-          return <div key={key}>
-            <div style={ST.secttl}>{m.label}</div>
-            {mes.map(e=>{
-              const d=e.data;
-              let lines = [];
-              if(key==='gewicht'){
-                lines=[`${d.weight} kg`,d.bmi?`BMI ${d.bmi}`:null,d.fat?`${d.fat}% Körperfett`:null];
-              } else if(key==='sport'){
-                lines=[`${d.duration} min · ${d.sportType||''}`,`Intensität ${d.intensity}/5`,d.calories?`${d.calories} kcal verbrannt`:null];
-              } else if(key==='stimmung'){
-                lines=[`Stimmung ${d.mood}/10`,`Energie ${d.energy}/10`,`Stress ${d.stress}/10`];
-              } else if(key==='schlaf'){
-                const ql=['','Sehr schlecht','Schlecht','Ok','Gut','Sehr gut'];
-                lines=[`${d.hours} Std`,`Qualität: ${ql[d.quality]||d.quality}`];
-              } else if(key==='schritte'){
-                lines=[`${(d.steps||0).toLocaleString('de-DE')} Schritte`];
-              } else if(key==='herz'){
-                lines=[`${d.bpm} bpm`,d.context||null];
-              } else if(key==='blutdruck'){
-                lines=[`${d.sys}/${d.dia} mmHg`,d.pulse?`Puls: ${d.pulse} bpm`:null];
-              } else if(key==='koerpermass'){
-                lines=[d.waist?`Taille: ${d.waist} cm`:null, d.hip?`Hüfte: ${d.hip} cm`:null,
-                  d.chest?`Brust: ${d.chest} cm`:null, d.arm?`Arm: ${d.arm} cm`:null].filter(Boolean);
-              }
-              return <div key={e.id} style={{...ST.card,marginBottom:6,padding:'12px 14px'}}>
-                <div style={{display:'flex',alignItems:'flex-start',gap:8}}>
-                  <div style={{width:3,minHeight:30,background:m.color,borderRadius:2,flexShrink:0,marginTop:2}}/>
-                  <div style={{flex:1}}>
-                    {lines.filter(Boolean).map((l,i)=>(
-                      <div key={i} style={{fontSize:i===0?14:12,fontWeight:i===0?600:400,
-                        color:i===0?m.color:C.muted,lineHeight:1.5}}>{l}</div>
-                    ))}
-                    {d.note&&<div style={{fontSize:11,color:C.faint,marginTop:4,fontStyle:'italic'}}>{d.note}</div>}
-                  </div>
-                </div>
-                <EntryActions e={e}/>
+                {grp.map(e=>{
+                  const d=e.data;
+                  const hm=(d.protein||0)+(d.carbs||0)+(d.fat||0)>0;
+                  return <div key={e.id} style={{background:C.card,borderRadius:8,padding:'10px 12px',marginBottom:5}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.productName||'Manuell'}</div>
+                        {d.brand&&<div style={{fontSize:10,color:C.muted}}>{d.brand}</div>}
+                        {d.quantity&&<div style={{fontSize:10,color:C.faint}}>{d.quantity} {d.unit}</div>}
+                      </div>
+                      {d.calories>0&&<span style={{fontSize:14,fontWeight:700,color:C.accent,flexShrink:0}}>{d.calories} kcal</span>}
+                    </div>
+                    {hm&&<div style={{display:'flex',gap:8,marginTop:7,paddingTop:7,borderTop:`1px solid ${C.border}33`,flexWrap:'wrap'}}>
+                      {d.protein>0&&<span style={{fontSize:11}}><span style={{color:C.sport,fontWeight:600}}>{d.protein}g</span><span style={{color:C.faint}}> Eiw.</span></span>}
+                      {d.carbs>0  &&<span style={{fontSize:11}}><span style={{color:C.water,fontWeight:600}}>{d.carbs}g</span><span style={{color:C.faint}}> KH</span></span>}
+                      {d.fat>0    &&<span style={{fontSize:11}}><span style={{color:C.mood,fontWeight:600}}>{d.fat}g</span><span style={{color:C.faint}}> Fett</span></span>}
+                      {d.fiber>0  &&<span style={{fontSize:11}}><span style={{color:C.success,fontWeight:600}}>{d.fiber}g</span><span style={{color:C.faint}}> Bstff.</span></span>}
+                    </div>}
+                    <EditDel e={e}/>
+                  </div>;
+                })}
               </div>;
             })}
+            {waterEs.map(e=>(
+              <div key={e.id} style={{background:C.card,borderRadius:8,padding:'10px 14px',marginBottom:5,
+                display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span style={{fontSize:13,color:C.water}}>💧 {e.data.water} ml Wasser</span>
+                <EditDel e={e}/>
+              </div>
+            ))}
+          </>
+        });
+      }
+
+      // ── Alle anderen Metriken ──
+      Object.entries(METRICS).filter(([k])=>k!=='ernaehrung').forEach(([key,m])=>{
+        const mes=dayEs.filter(e=>e.type===key);
+        if(!mes.length) return;
+        secs.push({
+          key, label:m.label, color:m.color, count:mes.length,
+          summary:METRIC_SUMMARY[key]?.(mes)||`${mes.length} Einträge`,
+          detail:()=><>{mes.map(e=>{
+            const lines=(METRIC_LINES[key]?.(e.data)||[]).filter(Boolean);
+            return <div key={e.id} style={{background:C.card,borderRadius:8,padding:'12px 14px',marginBottom:8}}>
+              {lines.map((l,i)=>(<div key={i} style={{fontSize:i===0?15:12,fontWeight:i===0?600:400,color:i===0?m.color:C.muted,lineHeight:1.6}}>{l}</div>))}
+              {e.data.note&&<div style={{fontSize:11,color:C.faint,marginTop:4,fontStyle:'italic'}}>{e.data.note}</div>}
+              <EditDel e={e}/>
+            </div>;
+          })}</>
+        });
+      });
+      return secs;
+    },[dayEs]);
+
+    return <>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+        <button onClick={goPrev} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,
+          width:40,height:40,display:'flex',alignItems:'center',justifyContent:'center',
+          color:C.accent,fontSize:20,cursor:'pointer',flexShrink:0}}>‹</button>
+        <input type="date" max={toDay()} value={selDate}
+          onChange={e=>{setSelDate(e.target.value);setExpanded(null);}}
+          style={{...ST.datePicker,marginBottom:0,flex:1,textAlign:'center'}}/>
+        <button onClick={goNext} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,
+          width:40,height:40,display:'flex',alignItems:'center',justifyContent:'center',
+          color:selDate>=toDay()?C.faint:C.accent,fontSize:20,cursor:'pointer',flexShrink:0}}
+          disabled={selDate>=toDay()}>›</button>
+      </div>
+      <div style={{fontSize:12,color:C.muted,textAlign:'center',marginBottom:20}}>{fmtLong(selDate)}</div>
+
+      {sections.length===0
+        ? <div style={{textAlign:'center',padding:'60px 0 40px'}}>
+            <div style={{fontSize:36,marginBottom:14}}>📅</div>
+            <div style={{fontSize:14,color:C.muted}}>Keine Einträge an diesem Tag</div>
+          </div>
+        : sections.map(sec=>{
+          const isOpen = expanded===sec.key;
+          return <div key={sec.key} style={{...ST.card,padding:0,overflow:'hidden',marginBottom:10}}>
+            <button onClick={()=>setExpanded(isOpen?null:sec.key)}
+              style={{width:'100%',background:'transparent',border:'none',cursor:'pointer',
+                padding:'14px 16px',display:'flex',alignItems:'center',gap:12,textAlign:'left'}}>
+              <div style={{width:3,borderRadius:2,alignSelf:'stretch',minHeight:36,background:sec.color,flexShrink:0}}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>{sec.label}</div>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                    <div style={ST.pill(sec.color)}>{sec.count}</div>
+                    <span style={{fontSize:18,color:isOpen?sec.color:C.faint,display:'inline-block',
+                      transition:'transform 0.2s',transform:isOpen?'rotate(90deg)':'rotate(0deg)'}}>›</span>
+                  </div>
+                </div>
+                <div style={{fontSize:11,color:C.muted,marginTop:3,overflow:'hidden',
+                  textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sec.summary}</div>
+              </div>
+            </button>
+            {isOpen&&<div style={{borderTop:`1px solid ${C.border}`,padding:'14px',background:`${sec.color}06`}}>
+              {sec.detail()}
+            </div>}
           </div>;
         })}
-      </>}
     </>;
   }
 
@@ -3327,7 +3054,7 @@ function App() {
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>{entries.length} Einträge · lokal gespeichert</span>
-          <span style={{color:C.faint}}>v4.4</span>
+          <span style={{color:C.faint}}>v4.5</span>
         </div>
       </header>
 
