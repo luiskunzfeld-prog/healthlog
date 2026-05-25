@@ -280,7 +280,7 @@ const SYNS = {
 
 function expandQuery(q) {
   const w = q.toLowerCase().trim();
-  const extras = SYNS[w] || [];
+  const extras = [...(SYNS[w] || [])]; // Kopie! Nie das Original mutieren
   // Auch Teilstring-Synonyme
   for (const [key, vals] of Object.entries(SYNS)) {
     if (w.includes(key)) extras.push(...vals);
@@ -1962,7 +1962,7 @@ function KalorienRechner({ settings, onSave, lastWeight, onUpdateSettings }) {
   };
 
   const STEP_LABELS = ['Körper', 'Aktivität', 'Ziel', 'Ergebnis'];
-  const canAdvance = [age&&kg&&cm, true, true, true][step];
+  const canAdvance = [kg&&cm, true, true, true][step];
   const result = step===3 ? calc() : null;
 
   // Quell-Hinweis für vorausgefüllte Felder
@@ -2093,8 +2093,8 @@ function KalorienRechner({ settings, onSave, lastWeight, onUpdateSettings }) {
             {result.toLocaleString('de-DE')} kcal als Ziel übernehmen
           </button>
         </> : (
-          <div style={{textAlign:'center',padding:'20px',color:C.danger,fontSize:13}}>
-            Bitte alle Felder in Schritt 1 ausfüllen.
+          <div style={{textAlign:'center',padding:'20px',color:C.danger,fontSize:13,lineHeight:1.6}}>
+            Bitte Alter in Schritt 1 eingeben —<br/>ohne Alter kann der Grundumsatz nicht berechnet werden.
           </div>
         )}
       </>}
@@ -2429,7 +2429,7 @@ function App() {
         {showKcalCalc
           ? <KalorienRechner
               settings={settings}
-              lastWeight={entries.filter(e=>e.type==='gewicht').at(-1)?.data.weight}
+              lastWeight={entries.filter(e=>e.type==='gewicht').at(0)?.data.weight}
               onSave={v=>{setSettings(s=>({...s,kalorienZiel:v}));setShowKcalCalc(false);}}
               onUpdateSettings={updates=>setSettings(s=>({...s,...updates}))}/>
           : <input style={ST.inp} type="number" inputMode="numeric"
