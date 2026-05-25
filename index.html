@@ -187,6 +187,58 @@ const LMDB = [
   {n:'Haferdrink',          b:'Oatly',   k:46,  p:1.0,  c:6.7,  f:1.5,  fi:0.8, s:4.0,  liq:true,  cat:'Vegetarisch'},
   {n:'Sojamilch',           b:'Alpro',   k:33,  p:3.0,  c:2.5,  f:1.8,  fi:0.5, s:2.5,  liq:true,  cat:'Vegetarisch'},
   {n:'Mandeldrink',         b:'Alpro',   k:24,  p:0.4,  c:3.2,  f:1.1,  fi:0.4, s:2.7,  liq:true,  cat:'Vegetarisch'},
+
+  // ── Prominente Markenprodukte mit EAN (Supermarkt-Highlights) ─────────────
+  // Aldi / Lidl / Rewe / Edeka Eigenmarken & bekannte Marken
+  {n:'Milka Vollmilch 100g',      b:'Mondelez',  k:534, p:7.3, c:59.0, f:29.0, fi:0,   s:57.0, liq:false, cat:'Süßes & Snacks', ean:'7622210951342'},
+  {n:'KitKat 2 Finger',           b:'Nestlé',    k:506, p:6.4, c:63.0, f:25.0, fi:1.7, s:44.0, liq:false, cat:'Süßes & Snacks', ean:'4008400201306'},
+  {n:'Snickers 50g',              b:'Mars',       k:488, p:8.1, c:59.0, f:24.0, fi:1.1, s:46.0, liq:false, cat:'Süßes & Snacks', ean:'5000159461122'},
+  {n:'Twix 50g',                  b:'Mars',       k:498, p:4.7, c:65.0, f:23.0, fi:0.9, s:42.0, liq:false, cat:'Süßes & Snacks', ean:'5000159412048'},
+  {n:'Haribo Goldbären 200g',     b:'Haribo',    k:343, p:6.0, c:77.0, f:0.5,  fi:0,   s:43.0, liq:false, cat:'Süßes & Snacks', ean:'4001686399057'},
+  {n:'Pringles Original 165g',    b:'Kellogg's', k:527, p:5.6, c:53.0, f:32.0, fi:2.8, s:1.5,  liq:false, cat:'Süßes & Snacks', ean:'5053990101871'},
+  {n:'Lay's Classic 150g',       b:'PepsiCo',   k:536, p:6.5, c:52.0, f:33.0, fi:4.5, s:0.7,  liq:false, cat:'Süßes & Snacks', ean:'5900259128829'},
+  {n:'Coca-Cola 330ml Dose',      b:'Coca-Cola', k:42,  p:0,   c:10.6, f:0,    fi:0,   s:10.6, liq:true,  cat:'Getränke',       ean:'5449000000996'},
+  {n:'Coca-Cola Zero 330ml',      b:'Coca-Cola', k:1,   p:0,   c:0.1,  f:0,    fi:0,   s:0.1,  liq:true,  cat:'Getränke',       ean:'5449000133328'},
+  {n:'Red Bull 250ml',            b:'Red Bull',  k:46,  p:0.4, c:11.0, f:0,    fi:0,   s:11.0, liq:true,  cat:'Getränke',       ean:'90162885'},
+  {n:'Fanta Orange 330ml',        b:'Coca-Cola', k:47,  p:0,   c:11.0, f:0,    fi:0,   s:11.0, liq:true,  cat:'Getränke',       ean:'5000112519731'},
+  {n:'Sprite 330ml',              b:'Coca-Cola', k:40,  p:0,   c:9.7,  f:0,    fi:0,   s:9.7,  liq:true,  cat:'Getränke',       ean:'5449000133380'},
+  {n:'Pepsi 330ml',               b:'PepsiCo',   k:41,  p:0,   c:10.7, f:0,    fi:0,   s:10.7, liq:true,  cat:'Getränke',       ean:'4060800100257'},
+  {n:'Oatly Haferdrink 1L',       b:'Oatly',     k:46,  p:1.0, c:6.7,  f:1.5,  fi:0.8, s:4.0,  liq:true,  cat:'Vegetarisch',    ean:'7394376616124'},
+  {n:'Alpro Soya Drink 1L',       b:'Alpro',     k:33,  p:3.3, c:2.5,  f:1.8,  fi:0.5, s:2.5,  liq:true,  cat:'Vegetarisch',    ean:'5411188119234'},
+  {n:'Arla Skyr Vanille 450g',    b:'Arla',      k:77,  p:10.0,c:7.8,  f:0.2,  fi:0,   s:6.4,  liq:false, cat:'Milch & Käse',   ean:'5707168000038'},
+  {n:'Müller Fruchtzwerg 100g',   b:'Müller',    k:98,  p:2.9, c:14.0, f:3.2,  fi:0,   s:13.0, liq:false, cat:'Milch & Käse',   ean:'4025500056018'},
+  {n:'Chiquita Banane',           b:'Chiquita',  k:89,  p:1.1, c:23.0, f:0.3,  fi:2.6, s:12.0, liq:false, cat:'Obst',           ean:'4011200296908'},
+  {n:'Kellogg's Cornflakes 375g',b:'Kellogg's',k:376, p:7.5, c:84.0, f:1.5,  fi:2.5, s:8.0,  liq:false, cat:'Brot & Getreide',ean:'5053827190085'},
+  {n:'Nestlé Cheerios 300g',      b:'Nestlé',    k:376, p:10.0,c:72.0, f:5.0,  fi:10.0,s:12.0, liq:false, cat:'Brot & Getreide',ean:'7613034898333'},
+  {n:'Dr. Oetker Ristorante Spec.',b:'Dr. Oetker',k:213,p:10.0,c:23.0, f:9.0,  fi:1.5, s:2.0,  liq:false, cat:'Fertigprodukte',  ean:'4001724832034'},
+  {n:'Iglo Fischstäbchen 400g',   b:'Iglo',      k:195, p:12.0,c:17.0, f:8.0,  fi:1.0, s:0.5,  liq:false, cat:'Fleisch & Fisch', ean:'4250241806013'},
+  {n:'Maggi Instantnudeln 64g',   b:'Maggi',     k:447, p:10.0,c:64.0, f:17.0, fi:2.0, s:2.0,  liq:false, cat:'Fertigprodukte',  ean:'4005500071297'},
+  {n:'Nutella 450g',              b:'Ferrero',   k:547, p:6.0, c:57.0, f:31.0, fi:0,   s:54.0, liq:false, cat:'Süßes & Snacks',  ean:'8000500217504'},
+  {n:'Ferrero Rocher 200g',       b:'Ferrero',   k:596, p:7.3, c:44.0, f:41.0, fi:0,   s:30.0, liq:false, cat:'Süßes & Snacks',  ean:'8000500020982'},
+  {n:'Lindt 70% Zartbitter 100g', b:'Lindt',     k:565, p:8.5, c:30.0, f:41.0, fi:11.0,s:19.0, liq:false, cat:'Süßes & Snacks',  ean:'4000539109424'},
+  {n:'Ritter Sport Vollmilch',    b:'Ritter',    k:545, p:7.8, c:55.0, f:32.0, fi:0.5, s:53.0, liq:false, cat:'Süßes & Snacks',  ean:'4000417009003'},
+  {n:'Weihenstephan Vollmilch 1L',b:'Weihensteph.',k:64,p:3.4, c:4.8,  f:3.5,  fi:0,   s:4.8,  liq:true,  cat:'Milch & Käse',   ean:'4002468021111'},
+  {n:'Activia Joghurt Erdbeere',  b:'Danone',    k:81,  p:3.5, c:12.0, f:1.8,  fi:0,   s:11.0, liq:false, cat:'Milch & Käse',   ean:'3033490000401'},
+  {n:'Müller Joghurt Natur 500g', b:'Müller',    k:61,  p:5.0, c:5.0,  f:3.5,  fi:0,   s:5.0,  liq:false, cat:'Milch & Käse',   ean:'4025500004607'},
+  {n:'Kraft Gouda Scheiben 150g', b:'Kraft',     k:356, p:25.0,c:0.1,  f:28.0, fi:0,   s:0.1,  liq:false, cat:'Milch & Käse',   ean:'7622210015143'},
+  {n:'Herta Kochschinken 200g',   b:'Herta',     k:109, p:18.0,c:1.0,  f:3.7,  fi:0,   s:1.0,  liq:false, cat:'Wurst & Aufschnitt',ean:'3175680124801'},
+  {n:'Fleischsalat Appel 200g',   b:'Appel',     k:226, p:8.0, c:4.5,  f:19.0, fi:0.4, s:2.5,  liq:false, cat:'Wurst & Aufschnitt',ean:'4017100560509'},
+  {n:'Bonduelle Mais 285g',       b:'Bonduelle', k:86,  p:3.2, c:19.0, f:1.2,  fi:2.7, s:3.2,  liq:false, cat:'Gemüse',          ean:'3083681048059'},
+  {n:'Heinz Tomato Ketchup 342g', b:'Heinz',     k:112, p:1.5, c:26.0, f:0.1,  fi:1.5, s:22.0, liq:false, cat:'Sonstiges',       ean:'0000087037519'},
+  {n:'Thomy Mayonnaise 200ml',    b:'Thomy',     k:680, p:1.5, c:4.0,  f:74.0, fi:0,   s:2.0,  liq:false, cat:'Sonstiges',       ean:'7613035117631'},
+  {n:'Maggi Würze 100ml',         b:'Maggi',     k:70,  p:8.5, c:4.0,  f:1.5,  fi:0,   s:0,    liq:true,  cat:'Sonstiges',       ean:'4005500004677'},
+  {n:'Allos Hafer Porridge',      b:'Allos',     k:372, p:13.0,c:59.0, f:7.0,  fi:10.0,s:1.0,  liq:false, cat:'Brot & Getreide', ean:'4016249032036'},
+  {n:'Bahlsen Leibniz Butter',    b:'Bahlsen',   k:477, p:7.3, c:69.0, f:18.0, fi:1.9, s:21.0, liq:false, cat:'Süßes & Snacks',  ean:'4017100010700'},
+  {n:'Manner Schnitten 75g',      b:'Manner',    k:506, p:7.0, c:65.0, f:24.0, fi:1.5, s:37.0, liq:false, cat:'Süßes & Snacks',  ean:'9000335105090'},
+  {n:'Hohes C Orange 1L',         b:'Eckes-Granini',k:45,p:0.7,c:10.0, f:0.2,  fi:0.2, s:8.4,  liq:true,  cat:'Getränke',        ean:'4088600104101'},
+  {n:'Capri-Sun Multivitamin 0.2L',b:'Capri-Sun',k:50, p:0,   c:12.0, f:0,    fi:0,   s:12.0, liq:true,  cat:'Getränke',        ean:'4000177154200'},
+  {n:'Nestlé Pure Life 0.5L',     b:'Nestlé',    k:0,   p:0,   c:0,    f:0,    fi:0,   s:0,    liq:true,  cat:'Getränke',        ean:'7613033648915'},
+  {n:'Gerolsteiner Sprudel 0.5L', b:'Gerolsteiner',k:0, p:0,   c:0,    f:0,    fi:0,   s:0,    liq:true,  cat:'Getränke',        ean:'4001513007063'},
+  {n:'Volvic Mineralwasser 0.5L', b:'Volvic',    k:0,   p:0,   c:0,    f:0,    fi:0,   s:0,    liq:true,  cat:'Getränke',        ean:'3057640119808'},
+  {n:'Alnatura Haferdrink 1L',    b:'Alnatura',  k:48,  p:1.1, c:7.0,  f:1.7,  fi:0.9, s:3.5,  liq:true,  cat:'Vegetarisch',     ean:'4104420064303'},
+  {n:'Alpro Mandel ungesüßt 1L',  b:'Alpro',     k:24,  p:0.4, c:3.2,  f:1.1,  fi:0.4, s:2.7,  liq:true,  cat:'Vegetarisch',     ean:'5411188035282'},
+  {n:'Vegeta Gewürzmischung',     b:'Podravka',  k:183, p:12.0,c:27.0, f:3.5,  fi:4.0, s:23.0, liq:false, cat:'Sonstiges',       ean:'3850103800193'},
+  {n:'Knorr Fix Spaghetti Bolognese',b:'Knorr',  k:295, p:11.0,c:55.0, f:2.5,  fi:5.0, s:10.0, liq:false, cat:'Fertigprodukte',  ean:'4038700106040'},
   // ── Sport & Fitness ───────────────────────────────────────────────────────
   {n:'Whey Protein',        b:'',        k:380, p:75.0, c:8.0,  f:5.0,  fi:0,   s:4.0,  liq:false, cat:'Sport & Fitness'},
   {n:'Protein Bar',         b:'',        k:370, p:30.0, c:40.0, f:10.0, fi:5.0, s:5.0,  liq:false, cat:'Sport & Fitness'},
@@ -232,9 +284,17 @@ function expandQuery(q) {
 }
 
 // Lokale Suche — Sofortergebnisse ohne Netzwerk
+function lmdbToItem(f) {
+  return { code: f.ean||'', name:f.n, brand:f.b, isLiq:f.liq, kcal:f.k, isLocal:true,
+    nutriments:{'energy-kcal_100g':f.k,'proteins_100g':f.p,'carbohydrates_100g':f.c,
+      'fat_100g':f.f,'fiber_100g':f.fi,'sugars_100g':f.s}, pqu:f.liq?'ml':'g' };
+}
 function searchLocal(q) {
   if (!q || q.length < 1) return [];
   const ql = q.toLowerCase().trim();
+  // EAN-Direkttreffer
+  const eanHit = LMDB.find(f => f.ean && f.ean === q.trim());
+  if (eanHit) return [lmdbToItem(eanHit)];
   const expanded = expandQuery(ql); // inkl. Synonyme
   const terms = ql.split(/\s+/).filter(t=>t.length>1);
 
@@ -260,16 +320,7 @@ function searchLocal(q) {
   .filter(x => x.score > 0)
   .sort((a,b) => b.score - a.score)
   .slice(0, 12)
-  .map(({f}) => ({
-    code:'', name:f.n, brand:f.b, isLiq:f.liq,
-    kcal:f.k, isLocal:true,
-    nutriments:{
-      'energy-kcal_100g':f.k, 'proteins_100g':f.p,
-      'carbohydrates_100g':f.c, 'fat_100g':f.f,
-      'fiber_100g':f.fi, 'sugars_100g':f.s,
-    },
-    pqu: f.liq ? 'ml' : 'g',
-  }));
+  .map(({f}) => lmdbToItem(f));
 }
 
 
@@ -295,6 +346,7 @@ const ST = {
   secttl: { fontSize:10, color:C.muted, letterSpacing:1.2, textTransform:'uppercase', marginBottom:14, marginTop:4 },
   sld:    clr=>({ accentColor:clr||C.accent, width:'100%', marginBottom:16 }),
   pill:   clr=>({ display:'inline-block', padding:'2px 8px', borderRadius:20, fontSize:11, background:`${clr}18`, color:clr, fontWeight:500 }),
+  datePicker: { width:'100%', background:'#0D0A07', border:`1px solid ${C.border}`, borderRadius:8, padding:'11px 13px', color:C.text, fontSize:15, fontFamily:'inherit', boxSizing:'border-box', marginBottom:12, colorScheme:'dark' },
 };
 
 function Bar({ color }) {
@@ -385,12 +437,23 @@ function ChartCard({ title, color, empty, stat, children }) {
   );
 }
 
+// ── DatePicker Feld (nur für neue Einträge) ───────────────────────────────────
+function DatePickerField({ value, onChange }) {
+  return <>
+    <label style={ST.lbl}>Datum</label>
+    <input type="date" style={ST.datePicker} value={value}
+      max={toDay()} onChange={e=>onChange(e.target.value)} />
+  </>;
+}
+
 // ── Forms ─────────────────────────────────────────────────────────────────────
 function GewichtForm({ add, settings, initialData, onSave, onClose }) {
   const [w,setW]=useState(initialData?String(initialData.weight):''); const [fat,setFat]=useState(initialData&&initialData.fat!=null?String(initialData.fat):''); const [note,setN]=useState(initialData?initialData.note||'':'');
+  const [date,setDate]=useState(toDay());
   const b  = w ? calcBMI(+w,settings.height) : null;
   const bl = b ? (b<18.5?'Untergewicht':b<25?'Normalgewicht':b<30?'Übergewicht':'Adipositas') : '';
   return <>
+    {!initialData && <DatePickerField value={date} onChange={setDate}/>}
     <label style={ST.lbl}>Gewicht (kg)</label>
     <input style={ST.inp} type="number" step="0.1" inputMode="decimal" placeholder="70.5" value={w} onChange={e=>setW(e.target.value)} />
     {b&&<div style={{fontSize:12,color:b>=18.5&&b<25?C.success:C.accent,marginTop:-8,marginBottom:12}}>BMI {b} — {bl}</div>}
@@ -400,7 +463,7 @@ function GewichtForm({ add, settings, initialData, onSave, onClose }) {
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
     <div style={{fontSize:11,color:C.muted,marginBottom:14}}>Körpergröße: {settings.height} cm</div>
     {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
-    <button style={ST.btn(C.accent)} onClick={()=>{ if(!w)return; const d={weight:+w,fat:fat?+fat:null,bmi:b,note}; onSave?onSave(d):add('gewicht',d); }}>Speichern</button>
+    <button style={ST.btn(C.accent)} onClick={()=>{ if(!w)return; const d={weight:+w,fat:fat?+fat:null,bmi:b,note}; onSave?onSave(d):add('gewicht',d,date); }}>Speichern</button>
   </>;
 }
 
@@ -409,7 +472,9 @@ function SportForm({ add, initialData, onSave, onClose }) {
   const intL=['Sehr leicht','Leicht','Mittel','Hart','Maximal'];
   const [st,setSt]=useState(initialData?initialData.sportType:'Laufen'); const [dur,setDur]=useState(initialData?String(initialData.duration):'');
   const [int,setInt]=useState(initialData?initialData.intensity:3); const [cal,setCal]=useState(initialData&&initialData.calories!=null?String(initialData.calories):''); const [note,setN]=useState(initialData?initialData.note||'':'');
+  const [date,setDate]=useState(toDay());
   return <>
+    {!initialData && <DatePickerField value={date} onChange={setDate}/>}
     <label style={ST.lbl}>Sportart</label>
     <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
       {types.map(t=><button key={t} onClick={()=>setSt(t)} style={{padding:'5px 12px',borderRadius:6,fontSize:12,border:`1px solid ${st===t?C.sport:C.border}`,background:st===t?`${C.sport}18`:'transparent',color:st===t?C.sport:C.muted}}>{t}</button>)}
@@ -423,14 +488,16 @@ function SportForm({ add, initialData, onSave, onClose }) {
     <label style={ST.lbl}>Notiz</label>
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
     {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
-    <button style={ST.btn(C.sport)} onClick={()=>{ if(!dur)return; const d={sportType:st,duration:+dur,intensity:int,calories:cal?+cal:null,note}; onSave?onSave(d):add('sport',d); }}>Speichern</button>
+    <button style={ST.btn(C.sport)} onClick={()=>{ if(!dur)return; const d={sportType:st,duration:+dur,intensity:int,calories:cal?+cal:null,note}; onSave?onSave(d):add('sport',d,date); }}>Speichern</button>
   </>;
 }
 
 function StimmungForm({ add, initialData, onSave, onClose }) {
   const [mood,setM]=useState(initialData?initialData.mood:7); const [energy,setE]=useState(initialData?initialData.energy:7);
   const [stress,setS]=useState(initialData?initialData.stress:3); const [note,setN]=useState(initialData?initialData.note||'':'');
+  const [date,setDate]=useState(toDay());
   return <>
+    {!initialData && <DatePickerField value={date} onChange={setDate}/>}
     <label style={ST.lbl}>Stimmung — {mood}/10</label>
     <input type="range" min="1" max="10" value={mood}   onChange={e=>setM(+e.target.value)} style={ST.sld(C.mood)} />
     <label style={ST.lbl}>Energie — {energy}/10</label>
@@ -440,7 +507,7 @@ function StimmungForm({ add, initialData, onSave, onClose }) {
     <label style={ST.lbl}>Notiz</label>
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
     {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
-    <button style={ST.btn(C.mood)} onClick={()=>{ const d={mood,energy,stress,note}; onSave?onSave(d):add('stimmung',d); }}>Speichern</button>
+    <button style={ST.btn(C.mood)} onClick={()=>{ const d={mood,energy,stress,note}; onSave?onSave(d):add('stimmung',d,date); }}>Speichern</button>
   </>;
 }
 
@@ -450,14 +517,16 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
   const [cal,setCal]  = useState(initialData&&initialData.calories!=null?String(initialData.calories):'');
   const [note,setN]   = useState(initialData?initialData.note||'':'');
   const [lookup,setLU]= useState(null); // null | 'scan' | 'search'
+  const [date,setDate]= useState(toDay());
 
   const handleProduct = data => {
-    if (onSave) onSave(data); else add('ernaehrung', data);
+    if (onSave) onSave(data); else add('ernaehrung', data, date);
     setLU(null);
   };
 
   return <>
     {lookup && <ProductLookup mode={lookup} onSave={handleProduct} onClose={()=>setLU(null)}/>}
+    {!initialData && <DatePickerField value={date} onChange={setDate}/>}
 
     {/* ── Zwei direkte Buttons ───────────────────────────────────────────── */}
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
@@ -499,14 +568,16 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
     <label style={ST.lbl}>Notiz</label>
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
     {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
-    <button style={ST.btn(C.water)} onClick={()=>{ const d={water,mealQ,calories:cal?+cal:null,note}; onSave?onSave(d):add('ernaehrung',d); }}>Speichern</button>
+    <button style={ST.btn(C.water)} onClick={()=>{ const d={water,mealQ,calories:cal?+cal:null,note}; onSave?onSave(d):add('ernaehrung',d,date); }}>Speichern</button>
   </>;
 }
 
 function SchlafForm({ add, initialData, onSave, onClose }) {
   const [hours,setH]=useState(initialData?initialData.hours:7.5); const [quality,setQ]=useState(initialData?initialData.quality:3); const [note,setN]=useState(initialData?initialData.note||'':'');
   const qualLabel=['Sehr schlecht','Schlecht','Ok','Gut','Sehr gut'];
+  const [date,setDate]=useState(toDay());
   return <>
+    {!initialData && <DatePickerField value={date} onChange={setDate}/>}
     <label style={ST.lbl}>Schlafdauer — {hours} Stunden</label>
     <input type="range" min="2" max="12" step="0.5" value={hours} onChange={e=>setH(+e.target.value)} style={ST.sld(C.sleep)} />
     <label style={ST.lbl}>Qualität — {quality}/5 · {qualLabel[quality-1]}</label>
@@ -514,85 +585,76 @@ function SchlafForm({ add, initialData, onSave, onClose }) {
     <label style={ST.lbl}>Notiz</label>
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
     {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
-    <button style={ST.btn(C.sleep,'#EAE0D0')} onClick={()=>{ const d={hours,quality,note}; onSave?onSave(d):add('schlaf',d); }}>Speichern</button>
+    <button style={ST.btn(C.sleep,'#EAE0D0')} onClick={()=>{ const d={hours,quality,note}; onSave?onSave(d):add('schlaf',d,date); }}>Speichern</button>
   </>;
 }
 
 function SchrittForm({ add, initialData, onSave, onClose }) {
   const [steps,setS]=useState(initialData?String(initialData.steps):''); const [note,setN]=useState(initialData?initialData.note||'':'');
+  const [date,setDate]=useState(toDay());
   return <>
+    {!initialData && <DatePickerField value={date} onChange={setDate}/>}
     <label style={ST.lbl}>Schritte</label>
     <input style={ST.inp} type="number" inputMode="numeric" placeholder="8000" value={steps} onChange={e=>setS(e.target.value)} />
     <label style={ST.lbl}>Notiz</label>
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
     {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
-    <button style={ST.btn(C.steps,'#EAE0D0')} onClick={()=>{ if(!steps)return; const d={steps:+steps,note}; onSave?onSave(d):add('schritte',d); }}>Speichern</button>
+    <button style={ST.btn(C.steps,'#EAE0D0')} onClick={()=>{ if(!steps)return; const d={steps:+steps,note}; onSave?onSave(d):add('schritte',d,date); }}>Speichern</button>
   </>;
 }
 
 
-// ── Barcode-Erkennung: BarcodeDetector → ZXing → Quagga ─────────────────────
+// ── Barcode-Erkennung: BarcodeDetector → ZXing BrowserMultiFormatReader ────
 async function detectFromImage(imageEl) {
-  // Methode 1: native BarcodeDetector (iOS 17+, Android Chrome)
+  // Methode 1: native BarcodeDetector (iOS 17+, Android Chrome, Samsung)
   if ('BarcodeDetector' in window) {
     try {
-      const fmts = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39'];
-      const det = new BarcodeDetector({ formats: fmts });
+      const fmts = await BarcodeDetector.getSupportedFormats().catch(()=>
+        ['ean_13','ean_8','upc_a','upc_e','code_128','code_39']);
+      const det = new BarcodeDetector({ formats: fmts.length ? fmts : ['ean_13','ean_8','upc_a','upc_e','code_128','code_39'] });
       const codes = await det.detect(imageEl);
       if (codes.length) return { code: codes[0].rawValue, method: 'BarcodeDetector' };
     } catch(e) {}
   }
 
-  // Methode 2: ZXing via Canvas
+  // Methode 2: ZXing BrowserMultiFormatReader (korrekte moderne API)
   const ZXL = window.ZXingLibrary || window.ZXing;
   if (ZXL) {
-    try {
-      const canvas = document.createElement('canvas');
-      if (imageEl instanceof HTMLCanvasElement) {
-        canvas.width = imageEl.width; canvas.height = imageEl.height;
-        canvas.getContext('2d').drawImage(imageEl, 0, 0);
-      } else {
-        canvas.width = imageEl.naturalWidth || imageEl.videoWidth || imageEl.width;
-        canvas.height = imageEl.naturalHeight || imageEl.videoHeight || imageEl.height;
-        canvas.getContext('2d').drawImage(imageEl, 0, 0);
-      }
-      const id = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
-      const hints = new Map();
-      hints.set(ZXL.DecodeHintType.TRY_HARDER, true);
-      hints.set(ZXL.DecodeHintType.POSSIBLE_FORMATS, [
-        ZXL.BarcodeFormat.EAN_13, ZXL.BarcodeFormat.EAN_8,
-        ZXL.BarcodeFormat.UPC_A, ZXL.BarcodeFormat.UPC_E,
-        ZXL.BarcodeFormat.CODE_128, ZXL.BarcodeFormat.CODE_39,
-      ]);
-      const reader = new ZXL.MultiFormatReader();
-      reader.setHints(hints);
-      const lum = new ZXL.RGBLuminanceSource(id.data, canvas.width, canvas.height);
-      const bmp = new ZXL.BinaryBitmap(new ZXL.HybridBinarizer(lum));
-      const result = reader.decode(bmp).getText();
-      if (result) return { code: result, method: 'ZXing' };
-    } catch(e) {}
-  }
-
-  // Methode 3: Quagga (falls geladen)
-  if (typeof Quagga !== 'undefined') {
-    try {
-      const canvas = document.createElement('canvas');
-      const src = imageEl instanceof HTMLCanvasElement ? imageEl : null;
-      if (!src) {
-        canvas.width = imageEl.naturalWidth || imageEl.videoWidth;
-        canvas.height = imageEl.naturalHeight || imageEl.videoHeight;
-        canvas.getContext('2d').drawImage(imageEl, 0, 0);
-      }
-      const result = await new Promise((res) => {
-        Quagga.decodeSingle({
-          decoder: { readers: ['ean_reader','ean_8_reader','upc_reader','code_128_reader'] },
-          locate: true, numOfWorkers: 0,
-          inputStream: { size: 1920 },
-          src: (src||canvas).toDataURL(),
-        }, r => res(r?.codeResult?.code || null));
-      });
-      if (result) return { code: result, method: 'Quagga' };
-    } catch(e) {}
+    // 2a: BrowserMultiFormatReader (empfohlen)
+    if (ZXL.BrowserMultiFormatReader) {
+      try {
+        const reader = new ZXL.BrowserMultiFormatReader();
+        let result;
+        if (imageEl instanceof HTMLVideoElement) {
+          const c = document.createElement('canvas');
+          c.width = imageEl.videoWidth || 640; c.height = imageEl.videoHeight || 480;
+          c.getContext('2d').drawImage(imageEl, 0, 0);
+          result = reader.decodeFromCanvas ? reader.decodeFromCanvas(c) : null;
+        } else if (imageEl instanceof HTMLImageElement) {
+          result = await reader.decodeFromImageElement(imageEl).catch(()=>null);
+        } else if (imageEl instanceof HTMLCanvasElement) {
+          result = reader.decodeFromCanvas ? reader.decodeFromCanvas(imageEl) : null;
+        }
+        if (result) return { code: result.getText(), method: 'ZXing' };
+      } catch(e) {}
+    }
+    // 2b: Niedrig-Level Canvas-API (Fallback für ältere ZXing-Bundles)
+    if (ZXL.MultiFormatReader && ZXL.RGBLuminanceSource) {
+      try {
+        const c = document.createElement('canvas');
+        c.width  = imageEl.naturalWidth  || imageEl.videoWidth  || imageEl.width  || 640;
+        c.height = imageEl.naturalHeight || imageEl.videoHeight || imageEl.height || 480;
+        c.getContext('2d').drawImage(imageEl, 0, 0);
+        const id = c.getContext('2d').getImageData(0,0,c.width,c.height);
+        const hints = new Map();
+        hints.set(ZXL.DecodeHintType?.TRY_HARDER ?? 3, true);
+        const reader = new ZXL.MultiFormatReader(); reader.setHints(hints);
+        const lum = new ZXL.RGBLuminanceSource(id.data, c.width, c.height);
+        const bmp = new ZXL.BinaryBitmap(new ZXL.HybridBinarizer(lum));
+        const res = reader.decode(bmp).getText();
+        if (res) return { code: res, method: 'ZXing-legacy' };
+      } catch(e) {}
+    }
   }
 
   return null;
@@ -796,9 +858,19 @@ function ProductLookup({ mode, onSave, onClose }) {
     } catch(e) { setErr('Fehler: '+e.message); setView('scan'); }
   };
 
-  // ── OpenFoodFacts Barcode ─────────────────────────────────────────────────
+  // ── OpenFoodFacts Barcode (mit lokalem EAN-Fallback) ─────────────────────
   const fetchProd = async code => {
     setBC(code); setView('loading');
+    // Erst lokale EAN-DB checken
+    const localHit = LMDB.find(f => f.ean && f.ean === code);
+    if (localHit) {
+      const item = lmdbToItem(localHit);
+      setProd({ name:item.name, brand:item.brand, isLiq:item.isLiq,
+        per100:{ kcal:item.kcal, protein:item.nutriments['proteins_100g'],
+          carbs:item.nutriments['carbohydrates_100g'], fat:item.nutriments['fat_100g'],
+          sugar:item.nutriments['sugars_100g'], fiber:item.nutriments['fiber_100g'] }});
+      setView('product'); return;
+    }
     try {
       const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),12000);
       const res = await fetch(
@@ -1000,186 +1072,490 @@ function preview(e) {
   return '';
 }
 
-// ── Apple Health XML Import ───────────────────────────────────────────────────
+// ── Universal Health Import ─────────────────────────────────────────────────
+// Unterstützt: Apple Health, Google Fit, Samsung Health, Garmin, Fitbit,
+//              MyFitnessPal, HealthLog JSON Backup, Generic CSV
+// Partial Import: Importiert was geht, meldet was nicht klappt
+
 function HealthImport({ onImport, settings }) {
-  const [state,setState]   = useState('idle'); // idle|loading|preview|done|error
+  const [state,setState]   = useState('idle');
   const [parsed,setParsed] = useState(null);
   const [errMsg,setErr]    = useState('');
+  const [appTab,setApp]    = useState('auto'); // auto|apple|google|samsung|garmin|fitbit|mfp|csv|json
 
-  const parseDoc = text => {
-    const doc = new DOMParser().parseFromString(text,'text/xml');
-    if (doc.querySelector('parsererror')) throw new Error('XML konnte nicht gelesen werden');
-    return doc;
+  // ── Format-Detektierung ────────────────────────────────────────────────────
+  const detectFormat = (zipFiles, rawText) => {
+    const names = Object.keys(zipFiles||{}).map(n=>n.toLowerCase());
+    if (names.some(n=>n.includes('export.xml'))) return 'apple';
+    if (names.some(n=>n.includes('workout-') || n.includes('sleep-') || n.includes('body_weight'))) return 'fitbit';
+    if (names.some(n=>n.includes('com.samsung.shealth'))) return 'samsung';
+    if (names.some(n=>n.includes('activities') && n.endsWith('.json'))) return 'garmin';
+    if (names.some(n=>n.includes('daily_activity_metrics'))) return 'google';
+    if (rawText) {
+      if (rawText.includes('<HealthData') || rawText.includes('HKQuantityTypeIdentifier')) return 'apple';
+      try { const j=JSON.parse(rawText); if (j.entries) return 'healthlog'; if (j.bucket||j.session) return 'google'; } catch{}
+      if (rawText.trim().startsWith('{')) { try { const j=JSON.parse(rawText); if (j.date&&j.weight) return 'fitbit-weight'; } catch{} }
+      if (rawText.includes('Date,Calories') || rawText.includes('Food Name,Calories')) return 'mfp';
+      if (rawText.includes('Date,Steps') || rawText.includes('date,steps')) return 'csv-steps';
+    }
+    return 'unknown';
   };
 
-  const readFile = async e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setState('loading'); setParsed(null); setErr('');
-    try {
-      let doc;
-      if (file.name.toLowerCase().endsWith('.zip')) {
-        if (typeof JSZip==='undefined') throw new Error('ZIP-Unterstützung lädt noch — kurz warten und nochmal versuchen');
-        const zip = await JSZip.loadAsync(file);
-        const xmlEntry = Object.values(zip.files).find(f=>!f.dir&&f.name.includes('export.xml')&&!f.name.includes('cda'));
-        if (!xmlEntry) throw new Error('Keine export.xml in der ZIP — ist es ein Apple Health Export?');
-        doc = parseDoc(await xmlEntry.async('string'));
-      } else {
-        doc = parseDoc(await file.text());
-      }
-
-      const entries = [];
-      let gw=0,sp=0,sl=0,sc=0;
-
-      // Gewicht
-      doc.querySelectorAll('Record[type="HKQuantityTypeIdentifierBodyMass"]').forEach(r=>{
+  // ── Apple Health Parser ────────────────────────────────────────────────────
+  const parseApple = (doc, entries, errors) => {
+    let gw=0,sp=0,sl=0,sc=0,fat=0;
+    // Gewicht
+    doc.querySelectorAll('Record[type="HKQuantityTypeIdentifierBodyMass"]').forEach(r=>{
+      try {
         const date=r.getAttribute('startDate')?.slice(0,10);
         const val=parseFloat(r.getAttribute('value'));
         const unit=r.getAttribute('unit');
         if(!date||isNaN(val)) return;
         const kg=unit==='lb'?+(val*0.453592).toFixed(1):val;
-        entries.push({id:uid(),date,ts:new Date(date).getTime(),type:'gewicht',
+        entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'gewicht',
           data:{weight:kg,fat:null,bmi:calcBMI(kg,settings.height),note:'Apple Health'}});
         gw++;
-      });
-
-      // Körperfett
-      const fatMap={};
-      doc.querySelectorAll('Record[type="HKQuantityTypeIdentifierBodyFatPercentage"]').forEach(r=>{
-        const date=r.getAttribute('startDate')?.slice(0,10);
-        const val=parseFloat(r.getAttribute('value'));
-        if(date&&!isNaN(val)) fatMap[date]=+(val*100).toFixed(1);
-      });
-      entries.forEach(e=>{ if(e.type==='gewicht'&&fatMap[e.date]) e.data.fat=fatMap[e.date]; });
-
-      // Workouts
-      doc.querySelectorAll('Workout').forEach(w=>{
+      } catch(e){ errors.push('Gewichtseintrag: '+e.message); }
+    });
+    // Körperfett
+    const fatMap={};
+    doc.querySelectorAll('Record[type="HKQuantityTypeIdentifierBodyFatPercentage"]').forEach(r=>{
+      const date=r.getAttribute('startDate')?.slice(0,10);
+      const val=parseFloat(r.getAttribute('value'));
+      if(date&&!isNaN(val)) fatMap[date]=+(val*100).toFixed(1);
+    });
+    entries.forEach(e=>{ if(e.type==='gewicht'&&fatMap[e.date]) { e.data.fat=fatMap[e.date]; fat++; }});
+    // Workouts
+    doc.querySelectorAll('Workout').forEach(w=>{
+      try {
         const date=w.getAttribute('startDate')?.slice(0,10);
         const dur=parseFloat(w.getAttribute('duration'));
+        if(!date||isNaN(dur)||dur<1) return;
         const actType=w.getAttribute('workoutActivityType');
         const cal=w.getAttribute('totalEnergyBurned');
-        if(!date||isNaN(dur)||dur<1) return;
-        entries.push({id:uid(),date,ts:new Date(date).getTime(),type:'sport',
+        entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'sport',
           data:{sportType:ACTIVITY_MAP[actType]||'Sonstiges',duration:Math.round(dur),
                 intensity:3,calories:cal?Math.round(parseFloat(cal)):null,note:'Apple Health'}});
         sp++;
-      });
+      } catch(e){ errors.push('Sport-Eintrag: '+e.message); }
+    });
+    // Schlaf
+    const sleepMap={};
+    doc.querySelectorAll('Record[type="HKCategoryTypeIdentifierSleepAnalysis"]').forEach(r=>{
+      const val=r.getAttribute('value')||'';
+      if(!val.includes('Asleep')&&val!=='HKCategoryValueSleepAnalysisAsleep') return;
+      const date=r.getAttribute('startDate')?.slice(0,10);
+      const mins=(new Date(r.getAttribute('endDate'))-new Date(r.getAttribute('startDate')))/60000;
+      if(date&&mins>0) sleepMap[date]=(sleepMap[date]||0)+mins;
+    });
+    Object.entries(sleepMap).forEach(([date,mins])=>{
+      entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'schlaf',
+        data:{hours:+(mins/60).toFixed(1),quality:3,note:'Apple Health'}});
+      sl++;
+    });
+    // Schritte
+    const stepsMap={};
+    doc.querySelectorAll('Record[type="HKQuantityTypeIdentifierStepCount"]').forEach(r=>{
+      const date=r.getAttribute('startDate')?.slice(0,10);
+      const val=parseInt(r.getAttribute('value'));
+      if(date&&!isNaN(val)) stepsMap[date]=(stepsMap[date]||0)+val;
+    });
+    Object.entries(stepsMap).forEach(([date,steps])=>{
+      entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'schritte',
+        data:{steps,note:'Apple Health'}});
+      sc++;
+    });
+    return {source:'Apple Health',gw,sp,sl,sc,fat};
+  };
 
+  // ── Google Fit JSON Parser ────────────────────────────────────────────────
+  const parseGoogleFit = (zipFiles, entries, errors) => {
+    let gw=0,sp=0,sl=0,sc=0;
+    const tryParse = s => { try{return JSON.parse(s);}catch{return null;} };
+    Object.entries(zipFiles).forEach(([name,content])=>{
+      const ln = name.toLowerCase();
+      // Gewicht / BMI
+      if(ln.includes('body weight') || ln.includes('weight.json') || ln.includes('bmi.json')) {
+        const d=tryParse(content); if(!d||!d.Data) return;
+        d.Data.forEach(r=>{ try{
+          const date=new Date(parseInt(r['Start time']||r.startTime)).toISOString().slice(0,10);
+          const kg=parseFloat(r['Weight (kg)']||r.value||0);
+          if(!isNaN(kg)&&kg>0){entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'gewicht',data:{weight:+(kg.toFixed(1)),fat:null,bmi:calcBMI(kg,settings.height),note:'Google Fit'}});gw++;}
+        }catch(e){errors.push('Google Gewicht: '+e.message);}});
+      }
+      // Schritte (daily activity)
+      else if(ln.includes('daily activity') || ln.includes('step count')) {
+        const d=tryParse(content); if(!d) return;
+        (d.bucket||d.Data||[]).forEach(r=>{ try{
+          const date=new Date(parseInt(r.startTimeMillis||r['Start time']||0)).toISOString().slice(0,10);
+          let steps=0;
+          (r.dataset||[]).forEach(ds=>(ds.point||[]).forEach(p=>(p.value||[]).forEach(v=>{steps+=v.intVal||0;})));
+          if(!steps) steps=parseInt(r['Step count']||r.steps||0);
+          if(date&&steps>0){entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'schritte',data:{steps,note:'Google Fit'}});sc++;}
+        }catch(e){errors.push('Google Schritte: '+e.message);}});
+      }
+      // Aktivitäten / Workouts  
+      else if(ln.includes('activity') && !ln.includes('daily')) {
+        const d=tryParse(content); if(!d) return;
+        (d.session||d.Data||[]).forEach(r=>{ try{
+          const date=new Date(parseInt(r.startTimeMillis||r['Start time']||0)).toISOString().slice(0,10);
+          const dur=Math.round((parseInt(r.endTimeMillis||r['End time']||0)-parseInt(r.startTimeMillis||r['Start time']||0))/60000);
+          if(date&&dur>0){entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'sport',data:{sportType:'Sonstiges',duration:dur,intensity:3,calories:null,note:'Google Fit'}});sp++;}
+        }catch(e){errors.push('Google Sport: '+e.message);}});
+      }
       // Schlaf
-      const sleepMap={};
-      doc.querySelectorAll('Record[type="HKCategoryTypeIdentifierSleepAnalysis"]').forEach(r=>{
-        const val=r.getAttribute('value')||'';
-        if(!val.includes('Asleep')&&val!=='HKCategoryValueSleepAnalysisAsleep') return;
-        const date=r.getAttribute('startDate')?.slice(0,10);
-        const mins=(new Date(r.getAttribute('endDate'))-new Date(r.getAttribute('startDate')))/60000;
-        if(date&&mins>0) sleepMap[date]=(sleepMap[date]||0)+mins;
-      });
-      Object.entries(sleepMap).forEach(([date,mins])=>{
-        entries.push({id:uid(),date,ts:new Date(date).getTime(),type:'schlaf',
-          data:{hours:+(mins/60).toFixed(1),quality:3,note:'Apple Health'}});
-        sl++;
-      });
+      else if(ln.includes('sleep')) {
+        const d=tryParse(content); if(!d) return;
+        (d.session||d.Data||[]).forEach(r=>{ try{
+          const date=new Date(parseInt(r.startTimeMillis||r['Start time']||0)).toISOString().slice(0,10);
+          const dur=(parseInt(r.endTimeMillis||r['End time']||0)-parseInt(r.startTimeMillis||r['Start time']||0))/3600000;
+          if(date&&dur>0){entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'schlaf',data:{hours:+(dur.toFixed(1)),quality:3,note:'Google Fit'}});sl++;}
+        }catch(e){errors.push('Google Schlaf: '+e.message);}});
+      }
+    });
+    return {source:'Google Fit',gw,sp,sl,sc};
+  };
 
-      // Schritte — pro Tag summiert
-      const stepsMap={};
-      doc.querySelectorAll('Record[type="HKQuantityTypeIdentifierStepCount"]').forEach(r=>{
-        const date=r.getAttribute('startDate')?.slice(0,10);
-        const val=parseInt(r.getAttribute('value'));
-        if(date&&!isNaN(val)) stepsMap[date]=(stepsMap[date]||0)+val;
-      });
-      Object.entries(stepsMap).forEach(([date,steps])=>{
-        entries.push({id:uid(),date,ts:new Date(date).getTime(),type:'schritte',
-          data:{steps,note:'Apple Health'}});
-        sc++;
-      });
+  // ── Samsung Health CSV Parser ──────────────────────────────────────────────
+  const parseSamsung = (zipFiles, entries, errors) => {
+    let gw=0,sp=0,sl=0,sc=0;
+    const parseCSV = (text) => {
+      const lines = text.split('\n').filter(l=>l.trim()&&!l.startsWith('#'));
+      if(lines.length<2) return [];
+      const hdr = lines[0].split(',').map(h=>h.trim().replace(/"/g,''));
+      return lines.slice(1).map(l=>{ const v=l.split(','); const o={}; hdr.forEach((h,i)=>o[h]=v[i]?.trim().replace(/"/g,'')||''); return o; });
+    };
+    Object.entries(zipFiles).forEach(([name,content])=>{
+      const ln=name.toLowerCase();
+      try {
+        if(ln.includes('weight')){
+          parseCSV(content).forEach(r=>{
+            const date=(r.start_time||r.create_time||'').slice(0,10);
+            const kg=parseFloat(r.weight||0);
+            if(date&&kg>0){entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'gewicht',data:{weight:+(kg.toFixed(1)),fat:r.body_fat?+parseFloat(r.body_fat).toFixed(1):null,bmi:calcBMI(kg,settings.height),note:'Samsung Health'}});gw++;}
+          });
+        } else if(ln.includes('exercise')||ln.includes('activity')){
+          parseCSV(content).forEach(r=>{
+            const date=(r.start_time||'').slice(0,10);
+            const dur=Math.round(parseFloat(r.duration||0)/60000)||parseInt(r.active_time||0);
+            if(date&&dur>0){entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'sport',data:{sportType:'Sonstiges',duration:dur,intensity:3,calories:r.calorie?Math.round(parseFloat(r.calorie)):null,note:'Samsung Health'}});sp++;}
+          });
+        } else if(ln.includes('sleep')){
+          parseCSV(content).forEach(r=>{
+            const date=(r.start_time||'').slice(0,10);
+            const dur=(parseFloat(r.total_sleep_time||r.duration||0)/3600000)||parseFloat(r.sleep_duration||0)/60;
+            if(date&&dur>0){entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'schlaf',data:{hours:+(dur.toFixed(1)),quality:3,note:'Samsung Health'}});sl++;}
+          });
+        } else if(ln.includes('step')){
+          parseCSV(content).forEach(r=>{
+            const date=(r.day_time||r.start_time||'').slice(0,10);
+            const steps=parseInt(r.count||r.step_count||0);
+            if(date&&steps>0){entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'schritte',data:{steps,note:'Samsung Health'}});sc++;}
+          });
+        }
+      } catch(e){errors.push('Samsung '+name+': '+e.message);}
+    });
+    return {source:'Samsung Health',gw,sp,sl,sc};
+  };
 
-      if (entries.length===0)
-        throw new Error('Keine Daten gefunden — ist es eine Apple Health export.xml?');
+  // ── Fitbit JSON Parser ────────────────────────────────────────────────────
+  const parseFitbit = (zipFiles, rawText, entries, errors) => {
+    let gw=0,sp=0,sl=0,sc=0;
+    const tryParse=s=>{try{return JSON.parse(s);}catch{return null;}};
+    const allFiles = zipFiles ? Object.entries(zipFiles) : [['_raw',rawText||'']];
+    allFiles.forEach(([name,content])=>{
+      const ln=name.toLowerCase();
+      try{
+        // Gewicht
+        if(ln.includes('weight')){
+          const d=tryParse(content); if(!Array.isArray(d)) return;
+          d.forEach(r=>{
+            const date=(r.date||r.logId||'').toString().slice(0,10);
+            const kg=parseFloat(r.weight||0);
+            if(date.match(/\d{4}-\d{2}-\d{2}/)&&kg>0){entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'gewicht',data:{weight:+(kg.toFixed(1)),fat:r.fat?+parseFloat(r.fat).toFixed(1):null,bmi:calcBMI(kg,settings.height),note:'Fitbit'}});gw++;}
+          });
+        }
+        // Schlaf
+        else if(ln.includes('sleep')){
+          const d=tryParse(content); if(!d) return;
+          (Array.isArray(d)?d:(d.sleep||[])).forEach(r=>{
+            const date=(r.dateOfSleep||r.startTime||'').slice(0,10);
+            const dur=parseFloat(r.minutesAsleep||0)/60||parseFloat(r.duration||0)/3600000;
+            if(date&&dur>0){entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'schlaf',data:{hours:+(dur.toFixed(1)),quality:3,note:'Fitbit'}});sl++;}
+          });
+        }
+        // Aktivitäten
+        else if(ln.includes('exercise')||ln.includes('activities-exercise')){
+          const d=tryParse(content); if(!Array.isArray(d)) return;
+          d.forEach(r=>{
+            const date=(r.startTime||r.originalStartTime||'').slice(0,10);
+            const dur=parseInt(r.activeDuration||r.duration||0)/60000||parseInt(r.activeDuration||0);
+            if(date&&dur>0){entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'sport',data:{sportType:r.activityName||'Sonstiges',duration:Math.round(dur),intensity:3,calories:r.calories?parseInt(r.calories):null,note:'Fitbit'}});sp++;}
+          });
+        }
+        // Schritte
+        else if(ln.includes('steps')||(ln.includes('activities-')&&ln.includes('steps'))){
+          const d=tryParse(content); if(!Array.isArray(d)) return;
+          d.forEach(r=>{
+            const date=(r.dateTime||r.date||'').slice(0,10);
+            const steps=parseInt(r.value||r.steps||0);
+            if(date&&steps>0){entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'schritte',data:{steps,note:'Fitbit'}});sc++;}
+          });
+        }
+      }catch(e){errors.push('Fitbit '+name+': '+e.message);}
+    });
+    return {source:'Fitbit',gw,sp,sl,sc};
+  };
 
-      // Datumsbereich
-      const dates=entries.map(e=>e.date).sort();
-      setParsed({ entries, gw, sp, sl, sc, from:dates[0], to:dates[dates.length-1] });
+  // ── MyFitnessPal CSV Parser ───────────────────────────────────────────────
+  const parseMFP = (rawText, entries, errors) => {
+    let food=0;
+    const lines = rawText.split('\n').filter(l=>l.trim());
+    const hdr = lines[0].split(',').map(h=>h.trim().replace(/"/g,'').toLowerCase());
+    lines.slice(1).forEach(line=>{
+      try {
+        const v=line.split(',');
+        const row={}; hdr.forEach((h,i)=>row[h]=(v[i]||'').trim().replace(/"/g,''));
+        const date=(row.date||'').slice(0,10);
+        const kcal=parseFloat(row.calories||row.energy||0);
+        const water=parseFloat(row.water||0);
+        if(!date.match(/\d{4}-\d{2}-\d{2}/)) return;
+        if(kcal>0||water>0){
+          entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'ernaehrung',
+            data:{water:Math.round(water),mealQ:3,calories:kcal>0?Math.round(kcal):null,
+              note:(row.meal_name||row.meal||row['food name']||'MyFitnessPal').slice(0,50),
+              productName:row['food name']||'MyFitnessPal Import',brand:'',quantity:parseFloat(row.quantity||100)||100,unit:'g',
+              per100:{kcal:kcal,protein:parseFloat(row.protein||0),carbs:parseFloat(row.carbohydrates||row.carbs||0),fat:parseFloat(row.fat||0),sugar:parseFloat(row.sugar||0),fiber:parseFloat(row.fiber||0)}}});
+          food++;
+        }
+      }catch(e){errors.push('MFP Zeile: '+e.message);}
+    });
+    return {source:'MyFitnessPal',food};
+  };
+
+  // ── Generic CSV (Schritte / Gewicht) ──────────────────────────────────────
+  const parseGenericCSV = (rawText, entries, errors) => {
+    let count=0;
+    const lines=rawText.split('\n').filter(l=>l.trim());
+    const hdr=lines[0].split(',').map(h=>h.trim().replace(/"/g,'').toLowerCase());
+    const hasDate=hdr.some(h=>h.includes('date'));
+    if(!hasDate){errors.push('CSV: Keine Datumsspalte gefunden'); return {source:'CSV',count:0};}
+    lines.slice(1).forEach(l=>{
+      try{
+        const v=l.split(',');const row={};hdr.forEach((h,i)=>row[h]=(v[i]||'').trim().replace(/"/g,''));
+        const date=(row.date||row.datum||'').slice(0,10);
+        if(!date.match(/\d{4}-\d{2}-\d{2}/)) return;
+        if(row.steps||row.schritte){entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'schritte',data:{steps:parseInt(row.steps||row.schritte||0),note:'CSV Import'}});count++;}
+        else if(row.weight||row.gewicht||row.kg){entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'gewicht',data:{weight:+parseFloat(row.weight||row.gewicht||row.kg||0).toFixed(1),fat:null,bmi:null,note:'CSV Import'}});count++;}
+      }catch(e){errors.push('CSV: '+e.message);}
+    });
+    return {source:'CSV',count};
+  };
+
+  // ── HealthLog JSON Backup Parser ──────────────────────────────────────────
+  const parseHealthLogJSON = (rawText, entries, errors) => {
+    try{
+      const j=JSON.parse(rawText);
+      const imported=(j.entries||[]).filter(e=>e.id&&e.date&&e.type&&e.data);
+      imported.forEach(e=>entries.push({...e,id:uid(),note:(e.data?.note||'')+' (importiert)'}));
+      return {source:'HealthLog Backup',count:imported.length};
+    }catch(e){errors.push('JSON: '+e.message);return {source:'HealthLog Backup',count:0};}
+  };
+
+  // ── Haupt-Parser ──────────────────────────────────────────────────────────
+  const readFile = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setState('loading'); setParsed(null); setErr('');
+    e.target.value='';
+    const entries=[]; const errors=[];
+    try {
+      let format='unknown', stats={}, zipFiles=null, rawText=null;
+      if(file.name.toLowerCase().endsWith('.zip')){
+        if(typeof JSZip==='undefined') throw new Error('ZIP-Unterstützung lädt — kurz warten');
+        const zip = await JSZip.loadAsync(file);
+        zipFiles={};
+        for(const [name,entry] of Object.entries(zip.files)){
+          if(!entry.dir) {
+            try{zipFiles[name]=await entry.async('string');}
+            catch{errors.push('Konnte nicht lesen: '+name);}
+          }
+        }
+        format = appTab==='auto' ? detectFormat(zipFiles,null) : appTab;
+      } else {
+        rawText = await file.text();
+        format = appTab==='auto' ? detectFormat(null,rawText) : appTab;
+      }
+
+      if(format==='apple'||format==='apple_xml'){
+        const xmlStr = zipFiles
+          ? Object.entries(zipFiles).find(([n])=>n.toLowerCase().includes('export.xml')&&!n.includes('cda'))?.[1]
+          : rawText;
+        if(!xmlStr) throw new Error('export.xml nicht gefunden');
+        const doc=new DOMParser().parseFromString(xmlStr,'text/xml');
+        if(doc.querySelector('parsererror')) throw new Error('XML konnte nicht gelesen werden');
+        stats=parseApple(doc,entries,errors);
+      } else if(format==='google'){
+        stats=parseGoogleFit(zipFiles||{},entries,errors);
+      } else if(format==='samsung'){
+        stats=parseSamsung(zipFiles||{},entries,errors);
+      } else if(format==='fitbit'){
+        stats=parseFitbit(zipFiles,rawText,entries,errors);
+      } else if(format==='mfp'){
+        stats=parseMFP(rawText||'',entries,errors);
+      } else if(format==='healthlog'||format==='json'){
+        stats=parseHealthLogJSON(rawText||'',entries,errors);
+      } else if(format==='csv-steps'||format==='csv'){
+        stats=parseGenericCSV(rawText||'',entries,errors);
+      } else {
+        // Blindes Parsen — alle bekannten Formate probieren
+        errors.push('Format nicht erkannt — versuche automatische Erkennung…');
+        if(zipFiles){
+          // Apple?
+          const xmlEntry=Object.entries(zipFiles).find(([n])=>n.toLowerCase().includes('export.xml')&&!n.includes('cda'));
+          if(xmlEntry){
+            const doc=new DOMParser().parseFromString(xmlEntry[1],'text/xml');
+            if(!doc.querySelector('parsererror')){stats=parseApple(doc,entries,errors);}
+          }
+          if(!entries.length) stats=parseSamsung(zipFiles,entries,errors);
+          if(!entries.length) stats=parseGoogleFit(zipFiles,entries,errors);
+          if(!entries.length) stats=parseFitbit(zipFiles,null,entries,errors);
+        } else if(rawText){
+          if(rawText.includes('<HealthData')){
+            const doc=new DOMParser().parseFromString(rawText,'text/xml');
+            if(!doc.querySelector('parsererror')) stats=parseApple(doc,entries,errors);
+          } else if(rawText.trim().startsWith('[')&&rawText.includes('weight')){
+            stats=parseFitbit(null,rawText,entries,errors);
+          } else if(rawText.includes('{')&&rawText.includes('entries')){
+            stats=parseHealthLogJSON(rawText,entries,errors);
+          } else if(rawText.includes(',')&&rawText.split('\n')[0].includes('ate')){
+            stats=parseGenericCSV(rawText,entries,errors);
+          }
+        }
+      }
+
+      if(entries.length===0&&errors.length===0)
+        throw new Error('Keine importierbaren Daten gefunden');
+
+      const dates=entries.length?entries.map(e=>e.date).sort():['—','—'];
+      setParsed({entries,stats,errors,from:dates[0],to:dates[dates.length-1]});
       setState('preview');
-    } catch(err) {
+    } catch(err){
       setErr(err.message||'Unbekannter Fehler');
       setState('error');
     }
-    e.target.value='';
   };
 
-  const confirm = () => {
-    onImport(parsed.entries);
-    setState('done');
+  const confirm = () => { onImport(parsed.entries); setState('done'); };
+  const reset   = () => { setState('idle'); setParsed(null); setErr(''); };
+
+  const APPS=[
+    {id:'auto',     l:'Automatisch'},
+    {id:'apple',    l:'Apple Health'},
+    {id:'google',   l:'Google Fit'},
+    {id:'samsung',  l:'Samsung Health'},
+    {id:'fitbit',   l:'Fitbit'},
+    {id:'mfp',      l:'MyFitnessPal'},
+    {id:'json',     l:'HealthLog JSON'},
+    {id:'csv',      l:'Eigene CSV'},
+  ];
+
+  const HINTS={
+    auto:'Format wird automatisch erkannt',
+    apple:'Health App → Profil-Bild → Alle Gesundheitsdaten exportieren → ZIP auswählen',
+    google:'Google Takeout → Fit → ZIP auswählen',
+    samsung:'Samsung Health App → Profil → Daten herunterladen → ZIP auswählen',
+    fitbit:'Fitbit → Einstellungen → Daten exportieren → ZIP oder einzelne JSON',
+    mfp:'MyFitnessPal → Daten exportieren → diary.csv auswählen',
+    json:'HealthLog → Daten → JSON Backup → Datei auswählen',
+    csv:'CSV mit Spalten: date,steps oder date,weight',
   };
 
-  const reset = () => { setState('idle'); setParsed(null); setErr(''); };
-
-  const Row = ({label,count,color}) => count>0 ? (
-    <div style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:`1px solid ${C.border}44`,fontSize:12}}>
-      <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <div style={{width:3,height:10,background:color,borderRadius:1}}/>
-        <span style={{color:C.muted}}>{label}</span>
-      </div>
-      <span style={{color,fontWeight:600}}>{count.toLocaleString('de-DE')}</span>
-    </div>
-  ) : null;
+  const ACCEPT={auto:'.zip,.xml,.json,.csv',apple:'.zip,.xml',google:'.zip,.json',
+    samsung:'.zip',fitbit:'.zip,.json',mfp:'.csv',json:'.json',csv:'.csv'};
 
   return (
     <div style={ST.card}>
-      <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>Apple Health Import</div>
+      <div style={{fontSize:14,fontWeight:600,marginBottom:12}}>Health-Daten importieren</div>
+
+      {/* App-Auswahl */}
+      <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:12}}>
+        {APPS.map(a=>(
+          <button key={a.id} onClick={()=>setApp(a.id)}
+            style={{padding:'5px 11px',borderRadius:6,fontSize:11,fontWeight:appTab===a.id?600:400,
+              border:`1px solid ${appTab===a.id?C.accent:C.border}`,
+              background:appTab===a.id?`${C.accent}18`:'transparent',
+              color:appTab===a.id?C.accent:C.muted}}>
+            {a.l}
+          </button>
+        ))}
+      </div>
 
       {state==='idle'&&<>
-        <div style={{fontSize:12,color:C.muted,marginBottom:6,lineHeight:1.7}}>
-          Gewicht, Workouts, Schlaf und Schritte aus Apple Health importieren.
-        </div>
-        <div style={{fontSize:11,color:C.faint,marginBottom:14,lineHeight:1.8,padding:'8px 12px',background:`${C.border}44`,borderRadius:8}}>
-          1. Health App → Profil-Bild → "Alle Gesundheitsdaten exportieren"<br/>
-          2. ZIP direkt auswählen — kein Entpacken nötig
+        <div style={{fontSize:12,color:C.muted,marginBottom:14,padding:'8px 12px',
+          background:`${C.border}44`,borderRadius:8,lineHeight:1.7}}>
+          {HINTS[appTab]}
         </div>
         <label style={{...ST.btn(C.accent),display:'block',textAlign:'center',cursor:'pointer'}}>
-          ZIP oder XML auswählen
-          <input type="file" accept=".zip,.xml" onChange={readFile} style={{display:'none'}}/>
+          Datei auswählen
+          <input type="file" accept={ACCEPT[appTab]||'.zip,.xml,.json,.csv'} onChange={readFile} style={{display:'none'}}/>
         </label>
       </>}
 
       {state==='loading'&&(
-        <div style={{textAlign:'center',padding:'20px 0',color:C.muted,fontSize:13}}>
-          Wird gelesen…
-        </div>
+        <div style={{textAlign:'center',padding:'20px 0',color:C.muted,fontSize:13}}>Wird verarbeitet…</div>
       )}
 
       {state==='preview'&&parsed&&<>
-        <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.6}}>
-          Zeitraum: <span style={{color:C.text}}>{fmtD(parsed.from)} — {fmtD(parsed.to)}</span>
+        <div style={{fontSize:13,fontWeight:600,marginBottom:8,color:C.accent}}>
+          {parsed.stats?.source||'Import'} — {parsed.entries.length.toLocaleString('de-DE')} Einträge
         </div>
-        <div style={{marginBottom:14}}>
-          <Row label="Gewichtsmessungen" count={parsed.gw} color={C.accent}/>
-          <Row label="Workouts"          count={parsed.sp} color={C.sport}/>
-          <Row label="Schlafdaten"       count={parsed.sl} color={C.sleep}/>
-          <Row label="Schrittdaten"      count={parsed.sc} color={C.steps}/>
-          <div style={{display:'flex',justifyContent:'space-between',padding:'7px 0',fontSize:13}}>
-            <span style={{fontWeight:600}}>Gesamt</span>
-            <span style={{fontWeight:700,color:C.accent}}>{parsed.entries.length.toLocaleString('de-DE')} Einträge</span>
+        <div style={{fontSize:12,color:C.muted,marginBottom:10}}>
+          Zeitraum: {fmtD(parsed.from)} — {fmtD(parsed.to)}
+        </div>
+        {/* Statistik */}
+        <div style={{marginBottom:10}}>
+          {[['Gewicht',parsed.stats?.gw,C.accent],['Sport',parsed.stats?.sp,C.sport],
+            ['Schlaf',parsed.stats?.sl,C.sleep],['Schritte',parsed.stats?.sc,C.steps],
+            ['Ernährung',parsed.stats?.food,C.water],['Sonstige',parsed.stats?.count,C.muted]
+          ].filter(([,v])=>v>0).map(([l,v,c])=>(
+            <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:`1px solid ${C.border}44`,fontSize:12}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}><div style={{width:3,height:10,background:c,borderRadius:1}}/><span style={{color:C.muted}}>{l}</span></div>
+              <span style={{color:c,fontWeight:600}}>{v?.toLocaleString('de-DE')}</span>
+            </div>
+          ))}
+        </div>
+        {/* Warnungen / Fehler */}
+        {parsed.errors.length>0&&(
+          <div style={{marginBottom:12,padding:'8px 12px',background:`${C.danger}14`,borderRadius:8}}>
+            <div style={{fontSize:11,fontWeight:600,color:C.danger,marginBottom:6}}>
+              {parsed.entries.length>0?'Teilweise nicht importierbar:':'Fehler beim Import:'}
+            </div>
+            {parsed.errors.slice(0,5).map((e,i)=>(
+              <div key={i} style={{fontSize:11,color:C.danger,lineHeight:1.6}}>• {e}</div>
+            ))}
+            {parsed.errors.length>5&&<div style={{fontSize:11,color:C.muted}}>…und {parsed.errors.length-5} weitere</div>}
           </div>
-        </div>
-        <button style={{...ST.btn(C.accent),marginBottom:8}} onClick={confirm}>
-          Importieren
-        </button>
-        <button style={{...ST.outbtn(C.muted)}} onClick={reset}>Abbrechen</button>
+        )}
+        {parsed.entries.length>0&&<>
+          <button style={{...ST.btn(C.accent),marginBottom:8}} onClick={confirm}>Importieren</button>
+          <button style={ST.outbtn(C.muted)} onClick={reset}>Abbrechen</button>
+        </>}
+        {parsed.entries.length===0&&<button style={ST.outbtn(C.muted)} onClick={reset}>Zurück</button>}
       </>}
 
       {state==='done'&&<>
         <div style={{fontSize:12,color:C.success,marginBottom:14,padding:'10px 14px',background:`${C.success}14`,borderRadius:8}}>
           Import abgeschlossen.
         </div>
-        <button style={ST.outbtn(C.muted)} onClick={reset}>Weiteren Import starten</button>
+        <button style={ST.outbtn(C.muted)} onClick={reset}>Weiteren Import</button>
       </>}
 
       {state==='error'&&<>
         <div style={{fontSize:12,color:C.danger,marginBottom:14,padding:'10px 14px',background:`${C.danger}14`,borderRadius:8,lineHeight:1.6}}>
           <b>Fehler:</b> {errMsg}
         </div>
-        <button style={ST.outbtn(C.muted)} onClick={reset}>Nochmal versuchen</button>
+        <button style={ST.outbtn(C.muted)} onClick={reset}>Nochmal</button>
       </>}
     </div>
   );
@@ -1197,8 +1573,8 @@ function App() {
   useEffect(()=>{ store.set('entries',entries); },[entries]);
   useEffect(()=>{ store.set('settings',settings); },[settings]);
 
-  const add = useCallback((type,data)=>{
-    setEntries(prev=>[{id:uid(),date:toDay(),ts:Date.now(),type,data},...prev]);
+  const add = useCallback((type,data,date=toDay())=>{
+    setEntries(prev=>[{id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type,data},...prev]);
     setAF(null);
   },[]);
 
@@ -1523,7 +1899,7 @@ function App() {
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>{entries.length} Einträge · lokal gespeichert</span>
-          <span style={{color:C.faint}}>v2.5</span>
+          <span style={{color:C.faint}}>v3.0</span>
         </div>
       </header>
 
