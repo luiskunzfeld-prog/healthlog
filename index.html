@@ -2269,6 +2269,7 @@ function App() {
   const [customTo,  setCT]     = useState('');
   const [editing,setEditing]   = useState(null);
   const [showKcalCalc,setShowKcalCalc] = useState(false);
+  const [journalAdd,setJournalAdd] = useState(null); // {type, date} — Neueintrag im Journal
 
   useEffect(()=>{ store.set('entries',entries); },[entries]);
   useEffect(()=>{ store.set('settings',settings); },[settings]);
@@ -2432,54 +2433,59 @@ function App() {
     const kcalPct  = Math.min(100,Math.round((todayKcal/kcalGoal)*100));
     const wtrPct   = Math.min(100,Math.round((todayWtr/wtrGoal)*100));
     return <>
-      <div style={{marginBottom:24}}>
+      <div style={{marginBottom:20}}>
         <div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Heute</div>
-        <div style={{fontFamily:"'DM Serif Display',Georgia,serif",fontSize:22,fontWeight:400,lineHeight:1.25,marginBottom:6}}>{dayStr}</div>
-        <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginTop:2}}>
-          <div style={{fontSize:12,color:C.muted}}>{todayEs.length} Einträge</div>
-          {streakData.count>0&&(
-            <div style={{display:'flex',alignItems:'center',gap:8,
-              background:`${C.accent}18`,border:`1px solid ${C.accent}50`,
-              borderRadius:8,padding:'5px 12px'}}>
+        <div style={{fontFamily:"'DM Serif Display',Georgia,serif",fontSize:22,fontWeight:400,lineHeight:1.25,marginBottom:10}}>{dayStr}</div>
+
+        {/* ── Streak-Badge — immer sichtbar ── */}
+        <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:streakData.atRisk?0:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:10,
+            background:streakData.count>0?`${C.accent}15`:C.cardAlt,
+            border:`1px solid ${streakData.count>0?C.accent+'40':C.border}`,
+            borderRadius:10,padding:'8px 14px'}}>
+            {streakData.count>0 ? <>
               <div style={{display:'flex',gap:2,alignItems:'flex-end'}}>
                 {[...Array(Math.min(streakData.count,5))].map((_,i)=>(
-                  <div key={i} style={{width:3,borderRadius:1.5,background:C.accent,
-                    height:4+i*2,opacity:0.5+i*0.1}}/>
+                  <div key={i} style={{width:3,borderRadius:1.5,background:C.accent,height:5+i*2}}/>
                 ))}
               </div>
-              <span style={{fontSize:13,color:C.accent,fontWeight:700,letterSpacing:0.1}}>
-                {streakData.count} {streakData.count===1?'Tag':'Tage'} Streak
-              </span>
-              {settings.streakSave?.savedDate&&!streakData.saveAvailable&&(
-                <div style={{width:6,height:6,borderRadius:1,background:C.accent,opacity:0.4}}/>
-              )}
-            </div>
-          )}
+              <div>
+                <div style={{fontSize:16,fontWeight:700,color:C.accent,lineHeight:1}}>
+                  {streakData.count} {streakData.count===1?'Tag':'Tage'}
+                </div>
+                <div style={{fontSize:10,color:C.accent,opacity:0.7,letterSpacing:0.5,marginTop:1}}>STREAK</div>
+              </div>
+            </> : <>
+              <div style={{width:3,borderRadius:1.5,background:C.faint,height:8}}/>
+              <div>
+                <div style={{fontSize:14,fontWeight:600,color:C.muted,lineHeight:1}}>Kein Streak</div>
+                <div style={{fontSize:10,color:C.faint,marginTop:1}}>Heute tracken zum Starten</div>
+              </div>
+            </>}
+            {settings.streakSave?.savedDate&&!streakData.saveAvailable&&(
+              <div style={{fontSize:9,color:C.accent,opacity:0.5,letterSpacing:0.5,marginLeft:2}}>SHIELD</div>
+            )}
+          </div>
           {streakData.saveAvailable&&!streakData.atRisk&&streakData.count>0&&(
-            <div style={{fontSize:10,color:C.muted,letterSpacing:0.2}}>Shield verfügbar</div>
+            <div style={{fontSize:10,color:C.muted}}>Shield verfügbar</div>
           )}
         </div>
+
         {/* ── Streak-Shield Banner ── */}
         {streakData.atRisk&&streakData.saveAvailable&&(
-          <div style={{marginTop:12,background:C.cardAlt,border:`1px solid ${C.border}`,
+          <div style={{marginTop:10,background:C.cardAlt,border:`1px solid ${C.border}`,
             borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
             <div>
               <div style={{fontSize:12,fontWeight:600,color:C.text}}>Streak in Gefahr</div>
-              <div style={{fontSize:11,color:C.muted,marginTop:2,lineHeight:1.4}}>
-                Gestern nicht getrackt — Shield noch verfügbar.
-              </div>
+              <div style={{fontSize:11,color:C.muted,marginTop:2}}>Gestern nicht getrackt — Shield verfügbar.</div>
             </div>
-            <button onClick={useStreakSave}
-              style={{background:'transparent',color:C.accent,border:`1px solid ${C.accent}`,borderRadius:7,
-                padding:'6px 14px',fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0,letterSpacing:0.2}}>
-              Retten
-            </button>
+            <button onClick={useStreakSave} style={{background:'transparent',color:C.accent,
+              border:`1px solid ${C.accent}`,borderRadius:7,padding:'6px 14px',
+              fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0}}>Retten</button>
           </div>
         )}
         {streakData.atRisk&&!streakData.saveAvailable&&(
-          <div style={{marginTop:10,fontSize:11,color:C.faint,letterSpacing:0.2}}>
-            Streak unterbrochen — heute tracken für einen Neustart.
-          </div>
+          <div style={{marginTop:8,fontSize:11,color:C.faint}}>Streak unterbrochen — heute tracken für Neustart.</div>
         )}
       </div>
 
@@ -3018,7 +3024,7 @@ function App() {
         const isEmpty = sec.count === 0;
         return <div key={sec.key} style={{...ST.card,padding:0,overflow:'hidden',marginBottom:8,
           opacity: isEmpty ? 0.7 : 1}}>
-          <button onClick={()=>isEmpty ? (setTab('eingabe'),setAF(sec.key)) : setExpanded(isOpen?null:sec.key)}
+          <button onClick={()=>isEmpty ? setJournalAdd({type:sec.key,date:selDate}) : setExpanded(isOpen?null:sec.key)}
             style={{width:'100%',background:'transparent',border:'none',cursor:'pointer',
               padding:'12px 16px',display:'flex',alignItems:'center',gap:12,textAlign:'left'}}>
             <div style={{width:3,borderRadius:2,alignSelf:'stretch',minHeight:30,background:isEmpty?C.faint:sec.color,flexShrink:0}}/>
@@ -3043,6 +3049,12 @@ function App() {
           {isOpen&&sec.detail&&(
             <div style={{borderTop:`1px solid ${C.border}`,padding:'14px',background:`${sec.color}05`}}>
               {sec.detail()}
+              <button onClick={()=>setJournalAdd({type:sec.key,date:selDate})}
+                style={{width:'100%',marginTop:8,padding:'9px',borderRadius:8,fontSize:12,
+                  background:'transparent',border:`1px dashed ${sec.color}50`,
+                  color:sec.color,cursor:'pointer',letterSpacing:0.2}}>
+                + Weiteres eintragen
+              </button>
             </div>
           )}
         </div>;
@@ -3107,7 +3119,7 @@ function App() {
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>{entries.length} Einträge · lokal gespeichert</span>
-          <span style={{color:C.faint}}>v4.7</span>
+          <span style={{color:C.faint}}>v4.8</span>
         </div>
       </header>
 
@@ -3144,14 +3156,55 @@ function App() {
         </div>
       )}
 
-      <nav style={{flexShrink:0,background:C.bg,borderTop:`1px solid ${C.border}`,display:'flex',padding:`10px 0 calc(10px + ${bot})`}}>
+      <nav style={{flexShrink:0,background:C.bg,borderTop:`1px solid ${C.border}`,display:'flex',
+        padding:`12px 0 calc(16px + ${bot})`}}>
         {NAV.map(n=>(
-          <button key={n.id} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4,background:'none',border:'none',padding:'4px 0'}} onClick={()=>setTab(n.id)}>
-            <div style={{width:3,height:3,borderRadius:'50%',background:tab===n.id?C.accent:'transparent',marginBottom:2}}/>
-            <span style={{fontSize:11,letterSpacing:0.6,textTransform:'uppercase',color:tab===n.id?C.accent:C.muted,fontWeight:tab===n.id?600:400,fontFamily:'inherit'}}>{n.l}</span>
+          <button key={n.id} onClick={()=>setTab(n.id)}
+            style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:5,
+              background:'none',border:'none',padding:'6px 0',minHeight:52,cursor:'pointer',
+              WebkitTapHighlightColor:'transparent'}}>
+            <div style={{width:4,height:4,borderRadius:'50%',
+              background:tab===n.id?C.accent:'transparent',transition:'background 0.2s'}}/>
+            <span style={{fontSize:10,letterSpacing:0.7,textTransform:'uppercase',
+              color:tab===n.id?C.accent:C.muted,
+              fontWeight:tab===n.id?600:400,fontFamily:'inherit',lineHeight:1.2}}>
+              {n.l}
+            </span>
           </button>
         ))}
       </nav>
+
+      {/* ── Journal: Neueintrag Modal ── */}
+      {journalAdd && (
+        <div style={{position:'fixed',inset:0,zIndex:300,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
+          <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.6)'}} onClick={()=>setJournalAdd(null)}/>
+          <div style={{position:'relative',background:C.card,borderRadius:'18px 18px 0 0',
+            padding:'24px 24px 40px',maxHeight:'90svh',overflowY:'auto',
+            border:`1px solid ${C.border}`,borderBottom:'none'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20}}>
+              <div>
+                <div style={{fontSize:10,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>
+                  Eintrag hinzufügen · {fmtD(journalAdd.date)}
+                </div>
+                <div style={{fontSize:16,fontWeight:600,color:METRICS[journalAdd.type].color}}>
+                  {METRICS[journalAdd.type].label}
+                </div>
+              </div>
+              <button onClick={()=>setJournalAdd(null)}
+                style={{background:'none',border:'none',color:C.muted,fontSize:22,lineHeight:1,padding:4}}>×</button>
+            </div>
+            {journalAdd.type==='gewicht'    && <GewichtForm    add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} settings={settings} onSave={null} onClose={()=>setJournalAdd(null)}/>}
+            {journalAdd.type==='sport'      && <SportForm      add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/>}
+            {journalAdd.type==='stimmung'   && <StimmungForm   add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/>}
+            {journalAdd.type==='ernaehrung' && <ErrorBoundary><ErnaehrungForm add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/></ErrorBoundary>}
+            {journalAdd.type==='schlaf'     && <SchlafForm     add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/>}
+            {journalAdd.type==='schritte'   && <SchrittForm    add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/>}
+            {journalAdd.type==='herz'       && <HerzForm       add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/>}
+            {journalAdd.type==='blutdruck'  && <BlutdruckForm  add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/>}
+            {journalAdd.type==='koerpermass'&& <KoerpermassForm add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
