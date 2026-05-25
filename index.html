@@ -520,6 +520,27 @@ function StimmungForm({ add, initialData, onSave, onClose }) {
   </>;
 }
 
+// ── ErrorBoundary — verhindert App-Crash bei Render-Fehlern ──────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(e) { return { err: e }; }
+  componentDidCatch(e) { console.warn('Render-Fehler abgefangen:', e?.message); }
+  render() {
+    if (this.state.err) return (
+      <div style={{padding:'20px',textAlign:'center',color:'#B87060',fontSize:13,lineHeight:1.7}}>
+        <div style={{fontSize:20,marginBottom:8}}>⚠</div>
+        Fehler beim Laden.<br/>
+        <button onClick={()=>this.setState({err:null})}
+          style={{marginTop:12,padding:'8px 18px',borderRadius:8,border:'1px solid #B87060',
+            background:'transparent',color:'#B87060',fontSize:13,cursor:'pointer'}}>
+          Neu versuchen
+        </button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
 function ErnaehrungForm({ add, initialData, onSave, onClose }) {
   const [tab,setTab]       = useState('suche');
   // Suche
@@ -549,27 +570,43 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
   const captureRef         = useRef(null);
 
   // ── Suche ────────────────────────────────────────────────────────────────
+  const searchCtrl = useRef(null); // laufenden Fetch abbrechen
+
   const handleSearch = async q => {
-    const local = searchLocal(q);
-    setRes(local);
-    if (!q.trim()||q.length<2) return;
-    setSrch(true);
+    // Vorherigen Fetch abbrechen
+    if (searchCtrl.current) { try { searchCtrl.current.abort(); } catch(e){} }
+
     try {
-      const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),8000);
-      const url=`https://de.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&action=process&json=1&page_size=15&sort_by=unique_scans_n&fields=code,product_name,brands,nutriments,product_quantity_unit`;
-      const res=await fetch(url,{signal:ctrl.signal});
-      const json=await res.json();
-      const off=(json.products||[]).filter(p=>p.product_name?.trim()).map(p=>({
+      const local = searchLocal(q);
+      setRes(local);
+      if (!q.trim() || q.length < 2) { setSrch(false); return; }
+      setSrch(true);
+
+      const ctrl = new AbortController();
+      searchCtrl.current = ctrl;
+      setTimeout(() => { try { ctrl.abort(); } catch(e){} }, 8000);
+
+      const url = `https://de.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&action=process&json=1&page_size=15&sort_by=unique_scans_n&fields=code,product_name,brands,nutriments,product_quantity_unit`;
+      const res  = await fetch(url, { signal: ctrl.signal });
+      const json = await res.json();
+
+      if (ctrl.signal.aborted) return; // neuere Suche ist unterwegs
+
+      const off = (json.products||[]).filter(p=>p.product_name?.trim()).map(p=>({
         code:p.code, name:p.product_name.trim(),
         brand:(p.brands||'').split(',')[0].trim(),
         isLiq:(p.product_quantity_unit||'').toLowerCase().includes('ml'),
         kcal:Math.round(pn((p.nutriments||{})['energy-kcal_100g'])),
         nutriments:p.nutriments||{}, pqu:p.product_quantity_unit||'',
       }));
-      const localNames=new Set(local.map(x=>x.name.toLowerCase()));
-      setRes([...local,...off.filter(x=>!localNames.has(x.name.toLowerCase()))].slice(0,20));
-    } catch(e){}
-    setSrch(false);
+      const localNames = new Set(local.map(x=>x.name.toLowerCase()));
+      setRes([...local, ...off.filter(x=>!localNames.has(x.name.toLowerCase()))].slice(0,20));
+    } catch(e) {
+      // AbortError ist erwartet — kein Crash
+      if (e?.name !== 'AbortError') console.warn('Suche fehlgeschlagen:', e?.message);
+    } finally {
+      setSrch(false);
+    }
   };
 
   // ── Barcode-Foto ─────────────────────────────────────────────────────────
@@ -1962,7 +1999,7 @@ function KalorienRechner({ settings, onSave, lastWeight, onUpdateSettings }) {
   };
 
   const STEP_LABELS = ['Körper', 'Aktivität', 'Ziel', 'Ergebnis'];
-  const canAdvance = [kg&&cm, true, true, true][step];
+  const canAdvance = [true, true, true, true][step];
   const result = step===3 ? calc() : null;
 
   // Quell-Hinweis für vorausgefüllte Felder
@@ -2468,7 +2505,7 @@ function App() {
             {activeForm==='gewicht'    && <GewichtForm    add={add} settings={settings}/>}
             {activeForm==='sport'      && <SportForm      add={add}/>}
             {activeForm==='stimmung'   && <StimmungForm   add={add}/>}
-            {activeForm==='ernaehrung' && <ErnaehrungForm add={add}/>}
+            {activeForm==='ernaehrung' && <ErrorBoundary><ErnaehrungForm add={add}/></ErrorBoundary>}
             {activeForm==='schlaf'     && <SchlafForm     add={add}/>}
             {activeForm==='schritte'   && <SchrittForm    add={add}/>}
             {activeForm==='herz'        && <HerzForm       add={add}/>}
@@ -2755,7 +2792,7 @@ function App() {
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>{entries.length} Einträge · lokal gespeichert</span>
-          <span style={{color:C.faint}}>v3.6</span>
+          <span style={{color:C.faint}}>v3.7</span>
         </div>
       </header>
 
@@ -2782,7 +2819,7 @@ function App() {
             {editing.type==='gewicht'    && <GewichtForm    add={add} settings={settings} initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
             {editing.type==='sport'      && <SportForm      add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
             {editing.type==='stimmung'   && <StimmungForm   add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
-            {editing.type==='ernaehrung' && <ErnaehrungForm add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
+            {editing.type==='ernaehrung' && <ErrorBoundary><ErnaehrungForm add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/></ErrorBoundary>}
             {editing.type==='schlaf'     && <SchlafForm     add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
             {editing.type==='schritte'   && <SchrittForm    add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/> }
             {editing.type==='herz'        && <HerzForm       add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
