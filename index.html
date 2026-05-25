@@ -75,10 +75,9 @@ const store = {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
-// LOKALE LEBENSMITTELDATENBANK — deutschsprachig, ~120 Produkte
-// Nährwerte immer pro 100g / 100ml
+// KEIN LOKALE DATENBANK — alle Produktdaten kommen live von OpenFoodFacts
 // ══════════════════════════════════════════════════════════════════════════════
-const LMDB = [
+const LMDB_PLACEHOLDER = [
   // ── Milch & Milchprodukte ─────────────────────────────────────────────────
   {n:'Vollmilch 3,5%',      b:'',        k:64,  p:3.3,  c:4.8,  f:3.5,  fi:0,   s:4.8,  liq:true,  cat:'Milch & Käse'},
   {n:'Halbfettmilch 1,5%',  b:'',        k:46,  p:3.3,  c:4.7,  f:1.5,  fi:0,   s:4.7,  liq:true,  cat:'Milch & Käse'},
@@ -245,92 +244,10 @@ const LMDB = [
   {n:'Alpro Mandel ungesüßt 1L',  b:'Alpro',     k:24,  p:0.4, c:3.2,  f:1.1,  fi:0.4, s:2.7,  liq:true,  cat:'Vegetarisch',     ean:'5411188035282'},
   {n:'Vegeta Gewürzmischung',     b:'Podravka',  k:183, p:12.0,c:27.0, f:3.5,  fi:4.0, s:23.0, liq:false, cat:'Sonstiges',       ean:'3850103800193'},
   {n:'Knorr Fix Spaghetti Bolognese',b:'Knorr',  k:295, p:11.0,c:55.0, f:2.5,  fi:5.0, s:10.0, liq:false, cat:'Fertigprodukte',  ean:'4038700106040'},
-  // ── Sport & Fitness ───────────────────────────────────────────────────────
-  {n:'Whey Protein',        b:'',        k:380, p:75.0, c:8.0,  f:5.0,  fi:0,   s:4.0,  liq:false, cat:'Sport & Fitness'},
-  {n:'Protein Bar',         b:'',        k:370, p:30.0, c:40.0, f:10.0, fi:5.0, s:5.0,  liq:false, cat:'Sport & Fitness'},
-  {n:'Bananen-Protein-Shake',b:'',       k:109, p:18.0, c:7.5,  f:2.0,  fi:1.5, s:3.0,  liq:true,  cat:'Sport & Fitness'},
-  // ── Fertigprodukte ────────────────────────────────────────────────────────
-  {n:'Ketchup',             b:'Heinz',   k:112, p:1.5,  c:26.0, f:0.1,  fi:1.5, s:22.0, liq:false, cat:'Sonstiges'},
-  {n:'Mayonnaise',          b:'',        k:680, p:1.5,  c:4.0,  f:74.0, fi:0,   s:2.0,  liq:false, cat:'Sonstiges'},
-  {n:'Senf',                b:'',        k:66,  p:3.7,  c:5.3,  f:3.8,  fi:3.0, s:2.0,  liq:false, cat:'Sonstiges'},
-  {n:'Hummus',              b:'',        k:177, p:7.9,  c:14.0, f:10.0, fi:6.0, s:0.5,  liq:false, cat:'Sonstiges'},
-  {n:'Tomatensoße (Dose)',  b:'',        k:55,  p:2.2,  c:9.0,  f:1.5,  fi:2.0, s:5.0,  liq:false, cat:'Sonstiges'},
 ];
 
-// Synonyme für häufige Tippfehler / alternative Schreibweisen
-const SYNS = {
-  'hähnchen':['huhn','hühnchen','chicken','hhn'],
-  'hühnchen':['hähnchen','huhn'],
-  'möhre':['karotte','möhren','mohre'],
-  'karotte':['möhre','karotten'],
-  'joghurt':['yogurt','yoghurt','jogurt'],
-  'nudeln':['pasta','spaghetti','penne','fusilli'],
-  'pasta':['nudeln','spaghetti'],
-  'milch':['milk'],
-  'ei':['eier','eggs'],
-  'brötchen':['semmel','weck','schrippe'],
-  'hähnchenbrust':['chicken breast','hühnerbrust'],
-  'thunfisch':['tuna','thon'],
-  'lachs':['salmon'],
-  'blaubeeren':['heidelbeeren','blueberries'],
-  'tomate':['tomaten'],
-  'paprika':['peperoni'],
-  'brokkoli':['broccoli'],
-};
-
-function expandQuery(q) {
-  const w = q.toLowerCase().trim();
-  const extras = [...(SYNS[w] || [])]; // Kopie! Nie das Original mutieren
-  // Auch Teilstring-Synonyme
-  for (const [key, vals] of Object.entries(SYNS)) {
-    if (w.includes(key)) extras.push(...vals);
-    if (vals.some(v => w.includes(v))) extras.push(key);
-  }
-  return [w, ...extras];
-}
-
-// Lokale Suche — Sofortergebnisse ohne Netzwerk
 // Sicheres Parsen von Nährwerten (string ODER number)
 const pn = v => +(parseFloat(v)||0);
-
-function lmdbToItem(f) {
-  return { code: f.ean||'', name:f.n, brand:f.b, isLiq:f.liq, kcal:f.k, isLocal:true,
-    nutriments:{'energy-kcal_100g':f.k,'proteins_100g':f.p,'carbohydrates_100g':f.c,
-      'fat_100g':f.f,'fiber_100g':f.fi,'sugars_100g':f.s}, pqu:f.liq?'ml':'g' };
-}
-function searchLocal(q) {
-  if (!q || q.length < 1) return [];
-  const ql = q.toLowerCase().trim();
-  // EAN-Direkttreffer
-  const eanHit = LMDB.find(f => f.ean && f.ean === q.trim());
-  if (eanHit) return [lmdbToItem(eanHit)];
-  const expanded = expandQuery(ql); // inkl. Synonyme
-  const terms = ql.split(/\s+/).filter(t=>t.length>1);
-
-  const scored = LMDB.map(f => {
-    const hay = (f.n+' '+f.b+' '+f.cat).toLowerCase();
-    let score = 0;
-    // Exakter Name-Match
-    if (f.n.toLowerCase() === ql) score += 100;
-    // Name beginnt mit Query
-    if (f.n.toLowerCase().startsWith(ql)) score += 50;
-    // Name enthält Query
-    if (f.n.toLowerCase().includes(ql)) score += 30;
-    // Kategorie enthält Query
-    if (f.cat.toLowerCase().includes(ql)) score += 15;
-    // Alle Terme matchen
-    if (terms.length>1 && terms.every(t=>hay.includes(t))) score += 25;
-    // Mind. ein Synonym matcht
-    if (expanded.some(syn => hay.includes(syn))) score += 20;
-    // Irgendwas aus dem Heuhaufen
-    if (score===0 && hay.includes(ql)) score = 5;
-    return { f, score };
-  })
-  .filter(x => x.score > 0)
-  .sort((a,b) => b.score - a.score)
-  .slice(0, 12)
-  .map(({f}) => lmdbToItem(f));
-}
 
 
 // ── Workout type → label ──────────────────────────────────────────────────────
@@ -576,19 +493,17 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
   const [mQty,   setMQ2] = useState('100');
   const [mUnit,  setMU]  = useState('g');
 
-  // ── Suche ──────────────────────────────────────────────────────────────────
+  // ── Suche — ausschließlich OpenFoodFacts API ───────────────────────────────
   const doSearch = async q => {
     if (abortRef.current) { try { abortRef.current.abort(); } catch(e){} abortRef.current = null; }
-    let local = [];
-    try { local = searchLocal(q); } catch(e) {}
-    setRes(local);
+    setRes([]);
     if (!q || q.trim().length < 2) { setLoad(false); return; }
     setLoad(true);
     try {
       const ctrl = new AbortController();
       abortRef.current = ctrl;
-      const timer = setTimeout(()=>{ try{ctrl.abort();}catch(e){} }, 7000);
-      const url = `https://de.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q.trim())}&action=process&json=1&page_size=15&sort_by=unique_scans_n&fields=code,product_name,brands,nutriments,product_quantity_unit`;
+      const timer = setTimeout(()=>{ try{ctrl.abort();}catch(e){} }, 8000);
+      const url = `https://de.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q.trim())}&action=process&json=1&page_size=20&sort_by=unique_scans_n&fields=code,product_name,brands,nutriments,product_quantity_unit`;
       const r = await fetch(url, { signal: ctrl.signal });
       clearTimeout(timer);
       if (ctrl.signal.aborted) return;
@@ -600,11 +515,8 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
         kcal:Math.round(pn((p.nutriments||{})['energy-kcal_100g'])),
         nutriments:p.nutriments||{}, pqu:p.product_quantity_unit||'',
       }));
-      if (!ctrl.signal.aborted) {
-        const lNames = new Set(local.map(x=>x.name.toLowerCase()));
-        setRes([...local, ...remote.filter(x=>!lNames.has(x.name.toLowerCase()))].slice(0,20));
-      }
-    } catch(err) { /* AbortError oder Netzwerkfehler → lokale Ergebnisse bleiben */ }
+      if (!ctrl.signal.aborted) setRes(remote.slice(0,20));
+    } catch(err) { /* AbortError oder Netzwerkfehler */ }
     finally { setLoad(false); }
   };
 
@@ -640,7 +552,7 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
   const N = calcN();
   const presets = selProd?.isLiq ? [100,200,250,330,500] : [25,50,100,150,200];
 
-  // ── Barcode ────────────────────────────────────────────────────────────────
+  // ── Barcode — direkt OpenFoodFacts API ────────────────────────────────────
   const handleCapture = async e => {
     const file = e?.target?.files?.[0]; if (!file) return; e.target.value=''; setScanE('');
     try {
@@ -650,11 +562,11 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
       const hit = await detectFromImage(img).catch(()=>null);
       URL.revokeObjectURL(url);
       if (!hit) { setScanE('Kein Barcode erkannt — bessere Beleuchtung versuchen'); return; }
-      const local = LMDB.find(f=>f.ean&&f.ean===hit.code);
-      if (local) { pickProduct(lmdbToItem(local)); return; }
+      setScanE('⏳ Produkt wird gesucht…');
       const ctrl = new AbortController(); setTimeout(()=>ctrl.abort(),8000);
       const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${hit.code}.json?fields=product_name,brands,nutriments,product_quantity_unit`,{signal:ctrl.signal});
       const json = await res.json();
+      setScanE('');
       if (json.status===1 && json.product?.product_name) {
         const p=json.product;
         pickProduct({name:p.product_name.trim(),brand:(p.brands||'').split(',')[0].trim(),
@@ -758,7 +670,7 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
         </div>
         {scanErr&&<div style={{fontSize:11,color:C.danger,marginBottom:8,padding:'6px 10px',
           background:`${C.danger}14`,borderRadius:6}}>{scanErr}</div>}
-        {loading&&<div style={{fontSize:11,color:C.muted,marginBottom:6}}>Suche online…</div>}
+        {loading&&<div style={{fontSize:11,color:C.muted,marginBottom:6}}>🌐 Suche in OpenFoodFacts…</div>}
         <div style={{maxHeight:240,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
           {results.map(r=>(
             <button key={(r.code||'')+r.name} onClick={()=>pickProduct(r)}
@@ -778,7 +690,7 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
           <div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'12px 0'}}>Keine Treffer</div>)}
         {searchQ.length===0&&(
           <div style={{fontSize:11,color:C.faint,textAlign:'center',padding:'10px 0',lineHeight:1.8}}>
-            Produktname tippen oder Barcode fotografieren</div>)}
+            Produktname tippen (min. 2 Zeichen) oder Barcode scannen</div>)}
       </>:<>
         <div style={{...ST.card,marginBottom:12,background:C.cardAlt,padding:'12px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
@@ -1275,19 +1187,9 @@ function ProductLookup({ mode, onSave, onClose }) {
     } catch(e) { setErr('Fehler: '+e.message); setView('scan'); }
   };
 
-  // ── OpenFoodFacts Barcode (mit lokalem EAN-Fallback) ─────────────────────
+  // ── OpenFoodFacts Barcode — direkt API, kein lokaler Fallback ────────────
   const fetchProd = async code => {
     setBC(code); setView('loading');
-    // Erst lokale EAN-DB checken
-    const localHit = LMDB.find(f => f.ean && f.ean === code);
-    if (localHit) {
-      const item = lmdbToItem(localHit);
-      setProd({ name:item.name, brand:item.brand, isLiq:item.isLiq,
-        per100:{ kcal:item.kcal, protein:item.nutriments['proteins_100g'],
-          carbs:item.nutriments['carbohydrates_100g'], fat:item.nutriments['fat_100g'],
-          sugar:item.nutriments['sugars_100g'], fiber:item.nutriments['fiber_100g'] }});
-      setView('product'); return;
-    }
     try {
       const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),12000);
       const res = await fetch(
@@ -1309,26 +1211,18 @@ function ProductLookup({ mode, onSave, onClose }) {
   // ── OpenFoodFacts Suche ───────────────────────────────────────────────────
   const doSearch = async q => {
     if (!q.trim()) return;
-    setSrch(true); setErr('');
-    // 1. Lokale DB sofort anzeigen
-    const local = searchLocal(q);
-    setRes(local);
+    setSrch(true); setErr(''); setRes([]);
     try {
       const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),12000);
       const fields='code,product_name,brands,nutriments,product_quantity_unit';
-      // Deutsche Subdomain für bessere DE-Abdeckung
       const deUrl=`https://de.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&action=process&json=1&page_size=20&sort_by=unique_scans_n&fields=${fields}`;
       const res   = await fetch(deUrl,{signal:ctrl.signal});
       const json  = await res.json();
       const off   = mkItems(json.products||[]);
-      // Zusammenführen: lokal zuerst, dann OFF (Duplikate nach Name raus)
-      const localNames = new Set(local.map(x=>x.name.toLowerCase()));
-      const merged = [...local, ...off.filter(x=>!localNames.has(x.name.toLowerCase()))];
-      setRes(merged.slice(0,20));
-      if (!merged.length) setErr('Keine Treffer — andere Schreibweise versuchen');
+      setRes(off.slice(0,20));
+      if (!off.length) setErr('Keine Treffer — andere Schreibweise versuchen');
     } catch {
-      // Netzwerkfehler → lokale Ergebnisse bleiben sichtbar
-      if (!local.length) setErr('Kein Netzwerk — nur lokale Ergebnisse');
+      setErr('Kein Netzwerk — manuelle Eingabe nutzen');
     }
     setSrch(false);
   };
@@ -1422,7 +1316,7 @@ function ProductLookup({ mode, onSave, onClose }) {
         {view==='search'&&<>
           <div style={{display:'flex',gap:8,marginBottom:12}}>
             <input style={{...ST.inp,marginBottom:0,flex:1}} placeholder="z.B. Vollmilch, Haferflocken, Joghurt…"
-              value={searchQ} onChange={e=>{ setSQ(e.target.value); setRes(searchLocal(e.target.value)); }}
+              value={searchQ} onChange={e=>setSQ(e.target.value)}
               onKeyDown={e=>e.key==='Enter'&&doSearch(searchQ)} autoFocus/>
             <button onClick={()=>doSearch(searchQ)}
               style={{background:C.water,color:C.bg,border:'none',borderRadius:8,padding:'0 16px',
@@ -3091,7 +2985,7 @@ function App() {
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>{entries.length} Einträge · lokal gespeichert</span>
-          <span style={{color:C.faint}}>v4.1</span>
+          <span style={{color:C.faint}}>v4.2</span>
         </div>
       </header>
 
