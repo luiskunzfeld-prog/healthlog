@@ -486,7 +486,34 @@ class ErrorBoundary extends React.Component {
 }
 
 function ErnaehrungForm({ add, initialData, onSave, onClose }) {
-  const [tab,    setTab]  = useState('suche');
+  // Beim Bearbeiten: richtigen Tab + Produkt vorausfüllen
+  const initTab = () => {
+    if (!initialData) return 'suche';
+    if (initialData.productName) return 'suche';
+    if (initialData.water > 0 && !initialData.productName) return 'wasser';
+    return 'manuell';
+  };
+  const initSel = () => {
+    if (!initialData?.productName) return null;
+    const q = initialData.quantity || 100;
+    const scale = v => v != null ? +(v * 100 / q).toFixed(2) : 0;
+    return {
+      name: initialData.productName, brand: initialData.brand||'',
+      isLiq: initialData.unit==='ml',
+      per100: {
+        kcal:    scale(initialData.calories),
+        protein: scale(initialData.protein),
+        carbs:   scale(initialData.carbs),
+        sugar:   scale(initialData.sugar),
+        fat:     scale(initialData.fat),
+        satFat:  scale(initialData.satFat),
+        fiber:   scale(initialData.fiber),
+        salt:    scale(initialData.salt),
+      }
+    };
+  };
+
+  const [tab,    setTab]  = useState(initTab);
   const [date,   setDate] = useState(toDay());
   const [mealTag,setMT]   = useState(initialData?.mealTag||'');
 
@@ -494,9 +521,9 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
   const [searchQ,setSQ]   = useState('');
   const [results,setRes]  = useState([]);
   const [loading,setLoad] = useState(false);
-  const [selProd,setSel]  = useState(null);
-  const [qty,    setQty]  = useState('100');
-  const [unit,   setUnit] = useState('g');
+  const [selProd,setSel]  = useState(initSel);
+  const [qty,    setQty]  = useState(String(initialData?.quantity||100));
+  const [unit,   setUnit] = useState(initialData?.unit||'g');
   const [scanErr,setScanE]= useState('');
   const captureRef        = useRef(null);
   const abortRef          = useRef(null);
@@ -507,18 +534,20 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
   const [cal,   setCal]   = useState(initialData?.calories != null ? String(initialData.calories) : '');
   const [note,  setNote]  = useState(initialData?.note || '');
 
-  // Manuell-Tab
-  const [mName,  setMN]  = useState('');
-  const [mKcal,  setMK]  = useState('');
-  const [mProt,  setMP]  = useState('');
-  const [mCarb,  setMC]  = useState('');
-  const [mSugar, setMSu] = useState('');
-  const [mFat,   setMF]  = useState('');
-  const [mSatFat,setMSF] = useState('');
-  const [mFiber, setMFi] = useState('');
-  const [mSalt,  setMSa] = useState('');
-  const [mQty,   setMQ2] = useState('100');
-  const [mUnit,  setMU]  = useState('g');
+  // Manuell-Tab — bei Edit mit Werten vorausfüllen wenn kein Produktname
+  const backCalc = (v,q) => v!=null&&q ? String(+(v*100/q).toFixed(1)) : '';
+  const mq0 = initialData?.quantity||100;
+  const [mName,  setMN]  = useState(initialData?.productName||'');
+  const [mKcal,  setMK]  = useState(initialData&&!initialData.productName ? backCalc(initialData.calories,mq0) : '');
+  const [mProt,  setMP]  = useState(initialData&&!initialData.productName ? backCalc(initialData.protein,mq0) : '');
+  const [mCarb,  setMC]  = useState(initialData&&!initialData.productName ? backCalc(initialData.carbs,mq0) : '');
+  const [mSugar, setMSu] = useState(initialData&&!initialData.productName ? backCalc(initialData.sugar,mq0) : '');
+  const [mFat,   setMF]  = useState(initialData&&!initialData.productName ? backCalc(initialData.fat,mq0) : '');
+  const [mSatFat,setMSF] = useState(initialData&&!initialData.productName ? backCalc(initialData.satFat,mq0) : '');
+  const [mFiber, setMFi] = useState(initialData&&!initialData.productName ? backCalc(initialData.fiber,mq0) : '');
+  const [mSalt,  setMSa] = useState(initialData&&!initialData.productName ? backCalc(initialData.salt,mq0) : '');
+  const [mQty,   setMQ2] = useState(String(mq0));
+  const [mUnit,  setMU]  = useState(initialData?.unit||'g');
 
   // ── Suche — ausschließlich OpenFoodFacts API ───────────────────────────────
   const doSearch = async q => {
@@ -2406,23 +2435,28 @@ function App() {
       <div style={{marginBottom:24}}>
         <div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Heute</div>
         <div style={{fontFamily:"'DM Serif Display',Georgia,serif",fontSize:22,fontWeight:400,lineHeight:1.25,marginBottom:6}}>{dayStr}</div>
-        <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+        <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginTop:2}}>
           <div style={{fontSize:12,color:C.muted}}>{todayEs.length} Einträge</div>
           {streakData.count>0&&(
-            <div style={{display:'flex',alignItems:'center',gap:6,
-              background:`${C.accent}12`,border:`1px solid ${C.accent}30`,
-              borderRadius:6,padding:'3px 10px'}}>
-              <div style={{width:5,height:5,borderRadius:'50%',background:C.accent}}/>
-              <span style={{fontSize:12,color:C.accent,fontWeight:600,letterSpacing:0.2}}>
-                {streakData.count} {streakData.count===1?'Tag':'Tage'}
+            <div style={{display:'flex',alignItems:'center',gap:8,
+              background:`${C.accent}18`,border:`1px solid ${C.accent}50`,
+              borderRadius:8,padding:'5px 12px'}}>
+              <div style={{display:'flex',gap:2,alignItems:'flex-end'}}>
+                {[...Array(Math.min(streakData.count,5))].map((_,i)=>(
+                  <div key={i} style={{width:3,borderRadius:1.5,background:C.accent,
+                    height:4+i*2,opacity:0.5+i*0.1}}/>
+                ))}
+              </div>
+              <span style={{fontSize:13,color:C.accent,fontWeight:700,letterSpacing:0.1}}>
+                {streakData.count} {streakData.count===1?'Tag':'Tage'} Streak
               </span>
               {settings.streakSave?.savedDate&&!streakData.saveAvailable&&(
-                <div style={{width:4,height:4,borderRadius:1,background:`${C.accent}60`,marginLeft:1}}/>
+                <div style={{width:6,height:6,borderRadius:1,background:C.accent,opacity:0.4}}/>
               )}
             </div>
           )}
           {streakData.saveAvailable&&!streakData.atRisk&&streakData.count>0&&(
-            <div style={{fontSize:10,color:C.muted,letterSpacing:0.3}}>Shield verfügbar</div>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:0.2}}>Shield verfügbar</div>
           )}
         </div>
         {/* ── Streak-Shield Banner ── */}
@@ -2852,30 +2886,43 @@ function App() {
 
       // ── Ernährung ──
       const ernEs = dayEs.filter(e=>e.type==='ernaehrung');
-      if (ernEs.length) {
-        const kcal=ernEs.reduce((s,e)=>s+(e.data.calories||0),0);
-        const prot=ernEs.reduce((s,e)=>s+(e.data.protein||0),0);
-        const carb=ernEs.reduce((s,e)=>s+(e.data.carbs||0),0);
-        const fat =ernEs.reduce((s,e)=>s+(e.data.fat||0),0);
-        const wtr =ernEs.reduce((s,e)=>s+(e.data.water||0),0);
-        const foodEs =ernEs.filter(e=>e.data.calories>0||e.data.productName);
-        const waterEs=ernEs.filter(e=>e.data.water>0&&!e.data.productName);
+      const kcal=ernEs.reduce((s,e)=>s+(e.data.calories||0),0);
+      const prot=ernEs.reduce((s,e)=>s+(e.data.protein||0),0);
+      const carb=ernEs.reduce((s,e)=>s+(e.data.carbs||0),0);
+      const fat =ernEs.reduce((s,e)=>s+(e.data.fat||0),0);
+      const sugr=ernEs.reduce((s,e)=>s+(e.data.sugar||0),0);
+      const sfat=ernEs.reduce((s,e)=>s+(e.data.satFat||0),0);
+      const fibr=ernEs.reduce((s,e)=>s+(e.data.fiber||0),0);
+      const salt=ernEs.reduce((s,e)=>s+(e.data.salt||0),0);
+      const wtr =ernEs.reduce((s,e)=>s+(e.data.water||0),0);
+      const foodEs =ernEs.filter(e=>e.data.calories>0||e.data.productName);
+      const waterEs=ernEs.filter(e=>e.data.water>0&&!e.data.productName);
 
-        secs.push({
-          key:'ernaehrung', label:'Ernährung', color:C.water, count:ernEs.length,
-          summary:[kcal>0&&`${kcal} kcal`,prot>0&&`${prot.toFixed(0)}g Eiweiß`,wtr>0&&`💧 ${wtr} ml`].filter(Boolean).join(' · '),
-          detail: ()=><>
-            {kcal>0&&<div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:14}}>
-              {[['Kcal',kcal,'',C.accent],['Eiweiß',+prot.toFixed(1),'g',C.sport],
+      secs.push({
+        key:'ernaehrung', label:'Ernährung', color:C.water, count:ernEs.length,
+        summary: ernEs.length ? [kcal>0&&`${kcal} kcal`,prot>0&&`${prot.toFixed(0)}g Eiweiß`,wtr>0&&`${wtr} ml Wasser`].filter(Boolean).join(' · ') : 'Noch kein Eintrag',
+        detail: ()=> ernEs.length===0 ? null : <>
+          {kcal>0&&<>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:5,marginBottom:6}}>
+              {[['Kalorien',kcal,'kcal',C.accent],['Eiweiß',+prot.toFixed(1),'g',C.sport],
                 ['KH',+carb.toFixed(1),'g',C.water],['Fett',+fat.toFixed(1),'g',C.mood]].map(([l,v,u,c])=>(
                 <div key={l} style={{background:C.card,borderRadius:8,padding:'8px 4px',textAlign:'center'}}>
                   <div style={{fontSize:14,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
-                  <div style={{fontSize:9,color:C.muted,marginTop:1}}>{u||'kcal'}</div>
-                  <div style={{fontSize:8,color:C.faint,letterSpacing:0.4,textTransform:'uppercase'}}>{l}</div>
+                  <div style={{fontSize:9,color:C.muted,marginTop:1}}>{u}</div>
+                  <div style={{fontSize:8,color:C.faint,letterSpacing:0.3,textTransform:'uppercase',marginTop:1}}>{l}</div>
                 </div>
               ))}
-            </div>}
-            {settings.kalorienZiel&&kcal>0&&<>
+            </div>
+            {(sugr>0||sfat>0||fibr>0||salt>0||wtr>0)&&(
+              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10,paddingBottom:10,borderBottom:`1px solid ${C.border}33`}}>
+                {sugr>0&&<span style={{fontSize:11,color:C.muted}}>Zucker <span style={{color:C.text,fontWeight:600}}>{sugr.toFixed(1)}g</span></span>}
+                {sfat>0&&<span style={{fontSize:11,color:C.muted}}>ges.Fett <span style={{color:C.text,fontWeight:600}}>{sfat.toFixed(1)}g</span></span>}
+                {fibr>0&&<span style={{fontSize:11,color:C.muted}}>Ballast. <span style={{color:C.success,fontWeight:600}}>{fibr.toFixed(1)}g</span></span>}
+                {salt>0&&<span style={{fontSize:11,color:C.muted}}>Salz <span style={{color:C.text,fontWeight:600}}>{salt.toFixed(2)}g</span></span>}
+                {wtr>0 &&<span style={{fontSize:11,color:C.water,fontWeight:600}}>{wtr} ml Wasser</span>}
+              </div>
+            )}
+            {settings.kalorienZiel&&<>
               <div style={{height:3,background:C.border,borderRadius:2,marginBottom:3}}>
                 <div style={{width:Math.min(100,Math.round(kcal/settings.kalorienZiel*100))+'%',height:'100%',background:C.accent,borderRadius:2}}/>
               </div>
@@ -2883,58 +2930,62 @@ function App() {
                 {Math.round(kcal/settings.kalorienZiel*100)}% von {settings.kalorienZiel} kcal Tagesziel
               </div>
             </>}
-            {['Frühstück','Mittagessen','Abendessen','Snack',''].map(tag=>{
-              const grp=foodEs.filter(e=>(e.data.mealTag||'')===tag);
-              if(!grp.length) return null;
-              const gKcal=grp.reduce((s,e)=>s+(e.data.calories||0),0);
-              return <div key={tag||'_'} style={{marginBottom:14}}>
-                <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',
-                  marginBottom:6,display:'flex',justifyContent:'space-between'}}>
-                  <span>{mealIcon[tag]||'🍽'} {tag||'Sonstiges'}</span>
-                  {gKcal>0&&<span style={{color:C.accent}}>{gKcal} kcal</span>}
-                </div>
-                {grp.map(e=>{
-                  const d=e.data;
-                  const hm=(d.protein||0)+(d.carbs||0)+(d.fat||0)>0;
-                  return <div key={e.id} style={{background:C.card,borderRadius:8,padding:'10px 12px',marginBottom:5}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.productName||'Manuell'}</div>
-                        {d.brand&&<div style={{fontSize:10,color:C.muted}}>{d.brand}</div>}
-                        {d.quantity&&<div style={{fontSize:10,color:C.faint}}>{d.quantity} {d.unit}</div>}
-                      </div>
-                      {d.calories>0&&<span style={{fontSize:14,fontWeight:700,color:C.accent,flexShrink:0}}>{d.calories} kcal</span>}
-                    </div>
-                    {hm&&<div style={{display:'flex',gap:8,marginTop:7,paddingTop:7,borderTop:`1px solid ${C.border}33`,flexWrap:'wrap'}}>
-                      {d.protein>0&&<span style={{fontSize:11}}><span style={{color:C.sport,fontWeight:600}}>{d.protein}g</span><span style={{color:C.faint}}> Eiw.</span></span>}
-                      {d.carbs>0  &&<span style={{fontSize:11}}><span style={{color:C.water,fontWeight:600}}>{d.carbs}g</span><span style={{color:C.faint}}> KH</span></span>}
-                      {d.fat>0    &&<span style={{fontSize:11}}><span style={{color:C.mood,fontWeight:600}}>{d.fat}g</span><span style={{color:C.faint}}> Fett</span></span>}
-                      {d.fiber>0  &&<span style={{fontSize:11}}><span style={{color:C.success,fontWeight:600}}>{d.fiber}g</span><span style={{color:C.faint}}> Bstff.</span></span>}
-                    </div>}
-                    <EditDel e={e}/>
-                  </div>;
-                })}
-              </div>;
-            })}
-            {waterEs.map(e=>(
-              <div key={e.id} style={{background:C.card,borderRadius:8,padding:'10px 14px',marginBottom:5,
-                display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <span style={{fontSize:13,color:C.water}}>💧 {e.data.water} ml Wasser</span>
-                <EditDel e={e}/>
+          </>}
+          {['Frühstück','Mittagessen','Abendessen','Snack',''].map(tag=>{
+            const grp=foodEs.filter(e=>(e.data.mealTag||'')===tag);
+            if(!grp.length) return null;
+            const gKcal=grp.reduce((s,e)=>s+(e.data.calories||0),0);
+            return <div key={tag||'_'} style={{marginBottom:14}}>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',
+                marginBottom:6,display:'flex',justifyContent:'space-between'}}>
+                <span>{mealIcon[tag]||'🍽'} {tag||'Sonstiges'}</span>
+                {gKcal>0&&<span style={{color:C.accent}}>{gKcal} kcal</span>}
               </div>
-            ))}
-          </>
-        });
-      }
+              {grp.map(e=>{
+                const d=e.data;
+                return <div key={e.id} style={{background:C.card,borderRadius:8,padding:'10px 12px',marginBottom:5}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.productName||'Manuell'}</div>
+                      {d.brand&&<div style={{fontSize:10,color:C.muted}}>{d.brand}</div>}
+                      {d.quantity&&<div style={{fontSize:10,color:C.faint}}>{d.quantity} {d.unit}</div>}
+                    </div>
+                    {d.calories>0&&<span style={{fontSize:14,fontWeight:700,color:C.accent,flexShrink:0}}>{d.calories} kcal</span>}
+                  </div>
+                  {/* Alle Nährwerte */}
+                  <div style={{display:'flex',gap:8,marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}33`,flexWrap:'wrap'}}>
+                    {d.protein>0&&<span style={{fontSize:11}}><span style={{color:C.sport,fontWeight:600}}>{d.protein}g</span><span style={{color:C.faint}}> Eiweiß</span></span>}
+                    {d.carbs>0  &&<span style={{fontSize:11}}><span style={{color:C.water,fontWeight:600}}>{d.carbs}g</span><span style={{color:C.faint}}> KH</span></span>}
+                    {d.fat>0    &&<span style={{fontSize:11}}><span style={{color:C.mood,fontWeight:600}}>{d.fat}g</span><span style={{color:C.faint}}> Fett</span></span>}
+                    {d.sugar>0  &&<span style={{fontSize:11}}><span style={{color:C.muted,fontWeight:600}}>{d.sugar}g</span><span style={{color:C.faint}}> Zucker</span></span>}
+                    {d.satFat>0 &&<span style={{fontSize:11}}><span style={{color:C.muted,fontWeight:600}}>{d.satFat}g</span><span style={{color:C.faint}}> g.Fett</span></span>}
+                    {d.fiber>0  &&<span style={{fontSize:11}}><span style={{color:C.success,fontWeight:600}}>{d.fiber}g</span><span style={{color:C.faint}}> Bstff.</span></span>}
+                    {d.salt>0   &&<span style={{fontSize:11}}><span style={{color:C.muted,fontWeight:600}}>{d.salt}g</span><span style={{color:C.faint}}> Salz</span></span>}
+                    {d.water>0  &&<span style={{fontSize:11,color:C.water,fontWeight:600}}>{d.water}ml H₂O</span>}
+                  </div>
+                  {d.note&&<div style={{fontSize:11,color:C.faint,marginTop:6,fontStyle:'italic'}}>{d.note}</div>}
+                  <EditDel e={e}/>
+                </div>;
+              })}
+            </div>;
+          })}
+          {waterEs.map(e=>(
+            <div key={e.id} style={{background:C.card,borderRadius:8,padding:'10px 14px',marginBottom:5,
+              display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <span style={{fontSize:13,color:C.water}}>{e.data.water} ml Wasser</span>
+              <EditDel e={e}/>
+            </div>
+          ))}
+        </>
+      });
 
-      // ── Alle anderen Metriken ──
+      // ── Alle anderen Metriken — immer anzeigen ──
       Object.entries(METRICS).filter(([k])=>k!=='ernaehrung').forEach(([key,m])=>{
         const mes=dayEs.filter(e=>e.type===key);
-        if(!mes.length) return;
         secs.push({
           key, label:m.label, color:m.color, count:mes.length,
-          summary:METRIC_SUMMARY[key]?.(mes)||`${mes.length} Einträge`,
-          detail:()=><>{mes.map(e=>{
+          summary: mes.length ? (METRIC_SUMMARY[key]?.(mes)||`${mes.length} Einträge`) : 'Noch kein Eintrag',
+          detail: mes.length===0 ? null : ()=><>{mes.map(e=>{
             const lines=(METRIC_LINES[key]?.(e.data)||[]).filter(Boolean);
             return <div key={e.id} style={{background:C.card,borderRadius:8,padding:'12px 14px',marginBottom:8}}>
               {lines.map((l,i)=>(<div key={i} style={{fontSize:i===0?15:12,fontWeight:i===0?600:400,color:i===0?m.color:C.muted,lineHeight:1.6}}>{l}</div>))}
@@ -2962,36 +3013,40 @@ function App() {
       </div>
       <div style={{fontSize:12,color:C.muted,textAlign:'center',marginBottom:20}}>{fmtLong(selDate)}</div>
 
-      {sections.length===0
-        ? <div style={{textAlign:'center',padding:'60px 0 40px'}}>
-            <div style={{fontSize:36,marginBottom:14}}>📅</div>
-            <div style={{fontSize:14,color:C.muted}}>Keine Einträge an diesem Tag</div>
-          </div>
-        : sections.map(sec=>{
-          const isOpen = expanded===sec.key;
-          return <div key={sec.key} style={{...ST.card,padding:0,overflow:'hidden',marginBottom:10}}>
-            <button onClick={()=>setExpanded(isOpen?null:sec.key)}
-              style={{width:'100%',background:'transparent',border:'none',cursor:'pointer',
-                padding:'14px 16px',display:'flex',alignItems:'center',gap:12,textAlign:'left'}}>
-              <div style={{width:3,borderRadius:2,alignSelf:'stretch',minHeight:36,background:sec.color,flexShrink:0}}/>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
-                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>{sec.label}</div>
-                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-                    <div style={ST.pill(sec.color)}>{sec.count}</div>
-                    <span style={{fontSize:18,color:isOpen?sec.color:C.faint,display:'inline-block',
-                      transition:'transform 0.2s',transform:isOpen?'rotate(90deg)':'rotate(0deg)'}}>›</span>
-                  </div>
+      {sections.map(sec=>{
+        const isOpen = expanded===sec.key;
+        const isEmpty = sec.count === 0;
+        return <div key={sec.key} style={{...ST.card,padding:0,overflow:'hidden',marginBottom:8,
+          opacity: isEmpty ? 0.7 : 1}}>
+          <button onClick={()=>isEmpty ? (setTab('eingabe'),setAF(sec.key)) : setExpanded(isOpen?null:sec.key)}
+            style={{width:'100%',background:'transparent',border:'none',cursor:'pointer',
+              padding:'12px 16px',display:'flex',alignItems:'center',gap:12,textAlign:'left'}}>
+            <div style={{width:3,borderRadius:2,alignSelf:'stretch',minHeight:30,background:isEmpty?C.faint:sec.color,flexShrink:0}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                <div style={{fontSize:13,fontWeight:600,color:isEmpty?C.muted:C.text}}>{sec.label}</div>
+                <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                  {isEmpty
+                    ? <span style={{fontSize:11,color:C.faint,letterSpacing:0.2}}>+ Eintragen</span>
+                    : <>
+                        <div style={ST.pill(sec.color)}>{sec.count}</div>
+                        <span style={{fontSize:18,color:isOpen?sec.color:C.faint,display:'inline-block',
+                          transition:'transform 0.2s',transform:isOpen?'rotate(90deg)':'rotate(0deg)'}}>›</span>
+                      </>
+                  }
                 </div>
-                <div style={{fontSize:11,color:C.muted,marginTop:3,overflow:'hidden',
-                  textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sec.summary}</div>
               </div>
-            </button>
-            {isOpen&&<div style={{borderTop:`1px solid ${C.border}`,padding:'14px',background:`${sec.color}06`}}>
+              <div style={{fontSize:11,color:C.faint,marginTop:2,overflow:'hidden',
+                textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sec.summary}</div>
+            </div>
+          </button>
+          {isOpen&&sec.detail&&(
+            <div style={{borderTop:`1px solid ${C.border}`,padding:'14px',background:`${sec.color}05`}}>
               {sec.detail()}
-            </div>}
-          </div>;
-        })}
+            </div>
+          )}
+        </div>;
+      })}
     </>;
   }
 
@@ -3045,25 +3100,24 @@ function App() {
   const bot='env(safe-area-inset-bottom,0px)', top='env(safe-area-inset-top,0px)';
 
   return (
-    <div style={{background:C.bg,minHeight:'100svh',color:C.text,paddingBottom:`calc(76px + ${bot})`}}>
-      <header style={{padding:`calc(20px + ${top}) 24px 16px`,borderBottom:`1px solid ${C.border}`}}>
+    <div style={{background:C.bg,height:'100svh',display:'flex',flexDirection:'column',overflow:'hidden',color:C.text}}>
+      <header style={{flexShrink:0,padding:`calc(20px + ${top}) 24px 16px`,borderBottom:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'DM Serif Display',Georgia,serif",fontSize:22,fontWeight:400,letterSpacing:0.3}}>
           Health<span style={{color:C.accent}}>Log</span>
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>{entries.length} Einträge · lokal gespeichert</span>
-          <span style={{color:C.faint}}>v4.6</span>
+          <span style={{color:C.faint}}>v4.7</span>
         </div>
       </header>
 
-      <main style={{padding:'24px 24px 0'}}>
+      <main style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch',padding:'24px 24px 32px'}}>
         {tab==='dashboard' && <Dashboard/>}
         {tab==='eingabe'   && <Eingabe/>}
         {tab==='tagebuch'  && <Tagebuch/>}
         {tab==='verlauf'   && <Verlauf/>}
         {tab==='export'    && <ExportTab/>}
       </main>
-
 
       {editing && (
         <div style={{position:'fixed',inset:0,zIndex:300,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
@@ -3090,7 +3144,7 @@ function App() {
         </div>
       )}
 
-      <nav style={{position:'fixed',bottom:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:480,background:C.bg,borderTop:`1px solid ${C.border}`,display:'flex',padding:`10px 0 calc(10px + ${bot})`,zIndex:100}}>
+      <nav style={{flexShrink:0,background:C.bg,borderTop:`1px solid ${C.border}`,display:'flex',padding:`10px 0 calc(10px + ${bot})`}}>
         {NAV.map(n=>(
           <button key={n.id} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4,background:'none',border:'none',padding:'4px 0'}} onClick={()=>setTab(n.id)}>
             <div style={{width:3,height:3,borderRadius:'50%',background:tab===n.id?C.accent:'transparent',marginBottom:2}}/>
