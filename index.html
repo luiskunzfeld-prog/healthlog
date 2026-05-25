@@ -23,6 +23,8 @@
     button { font-family:inherit; cursor:pointer; }
     button:active { opacity:.75; transform:scale(.97); }
     ::-webkit-scrollbar { display:none; }
+    html,body { overflow-x:hidden; }
+    #root { overflow-x:hidden; }
   </style>
 </head>
 <body>
@@ -516,72 +518,308 @@ function StimmungForm({ add, initialData, onSave, onClose }) {
 }
 
 function ErnaehrungForm({ add, initialData, onSave, onClose }) {
-  const [water,setW]  = useState(initialData?initialData.water:0);
-  const [mealQ,setMQ] = useState(initialData?initialData.mealQ:3);
-  const [cal,setCal]  = useState(initialData&&initialData.calories!=null?String(initialData.calories):'');
-  const [note,setN]   = useState(initialData?initialData.note||'':'');
-  const [lookup,setLU]= useState(null); // null | 'scan' | 'search'
-  const [mealTag,setMT]= useState(initialData?.mealTag||'');
-  const [date,setDate]= useState(toDay());
+  const [tab,setTab]       = useState('suche');
+  // Suche
+  const [searchQ,setSQ]    = useState('');
+  const [results,setRes]   = useState([]);
+  const [srching,setSrch]  = useState(false);
+  const [selProd,setSel]   = useState(null);
+  const [qty,setQty]       = useState('100');
+  const [unit,setUnit]     = useState('g');
+  // Wasser/Allgemein
+  const [water,setW]       = useState(initialData?initialData.water:0);
+  const [mealQ,setMQ]      = useState(initialData?initialData.mealQ:3);
+  const [cal,setCal]       = useState(initialData&&initialData.calories!=null?String(initialData.calories):'');
+  const [note,setNote]     = useState(initialData?initialData.note||'':'');
+  const [mealTag,setMT]    = useState(initialData?.mealTag||'');
+  // Manuell
+  const [mName,setMN]      = useState('');
+  const [mKcal,setMK]      = useState('');
+  const [mProt,setMP]      = useState('');
+  const [mCarb,setMC]      = useState('');
+  const [mFat,setMF]       = useState('');
+  const [mQty,setMQ2]      = useState('100');
+  const [mUnit,setMU]      = useState('g');
+  const [scanErr,setScanE] = useState('');
 
-  const handleProduct = data => {
-    if (onSave) onSave(data); else add('ernaehrung', data, date);
-    setLU(null);
+  const [date,setDate]     = useState(toDay());
+  const captureRef         = useRef(null);
+
+  // ── Suche ────────────────────────────────────────────────────────────────
+  const handleSearch = async q => {
+    const local = searchLocal(q);
+    setRes(local);
+    if (!q.trim()||q.length<2) return;
+    setSrch(true);
+    try {
+      const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),8000);
+      const url=`https://de.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&action=process&json=1&page_size=15&sort_by=unique_scans_n&fields=code,product_name,brands,nutriments,product_quantity_unit`;
+      const res=await fetch(url,{signal:ctrl.signal});
+      const json=await res.json();
+      const off=(json.products||[]).filter(p=>p.product_name?.trim()).map(p=>({
+        code:p.code, name:p.product_name.trim(),
+        brand:(p.brands||'').split(',')[0].trim(),
+        isLiq:(p.product_quantity_unit||'').toLowerCase().includes('ml'),
+        kcal:Math.round((p.nutriments||{})['energy-kcal_100g']||0),
+        nutriments:p.nutriments||{}, pqu:p.product_quantity_unit||'',
+      }));
+      const localNames=new Set(local.map(x=>x.name.toLowerCase()));
+      setRes([...local,...off.filter(x=>!localNames.has(x.name.toLowerCase()))].slice(0,20));
+    } catch(e){}
+    setSrch(false);
   };
 
+  // ── Barcode-Foto ─────────────────────────────────────────────────────────
+  const handleCapture = async e => {
+    const file=e.target.files?.[0]; if(!file)return; e.target.value=''; setScanE('');
+    try {
+      const url=URL.createObjectURL(file);
+      const img=new Image();
+      await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=url;});
+      const result=await detectFromImage(img);
+      URL.revokeObjectURL(url);
+      if(!result){setScanE('Kein Barcode erkannt — bessere Beleuchtung versuchen'); return;}
+      const localHit=LMDB.find(f=>f.ean&&f.ean===result.code);
+      if(localHit){selectProduct(lmdbToItem(localHit)); return;}
+      const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),8000);
+      const res=await fetch(`https://world.openfoodfacts.org/api/v2/product/${result.code}.json?fields=product_name,brands,nutriments,product_quantity_unit`,{signal:ctrl.signal});
+      const json=await res.json();
+      if(json.status===1&&json.product?.product_name){
+        const p=json.product, n=p.nutriments||{};
+        const isLiq=(p.product_quantity_unit||'').toLowerCase().includes('ml');
+        setSel({name:p.product_name.trim(),brand:(p.brands||'').split(',')[0].trim(),isLiq,
+          per100:{kcal:Math.round(n['energy-kcal_100g']||(n['energy_100g']||0)/4.184),
+            protein:+((n['proteins_100g']||0).toFixed(1)),carbs:+((n['carbohydrates_100g']||0).toFixed(1)),
+            fat:+((n['fat_100g']||0).toFixed(1)),sugar:+((n['sugars_100g']||0).toFixed(1)),fiber:+((n['fiber_100g']||0).toFixed(1))}});
+        setUnit(isLiq?'ml':'g'); setQty(isLiq?'200':'100');
+      } else { setScanE('Produkt nicht gefunden — manuell eingeben'); }
+    } catch(err){ setScanE('Netzwerkfehler beim Barcode-Lookup'); }
+  };
+
+  const selectProduct = r => {
+    const n=r.nutriments||{};
+    setSel({name:r.name,brand:r.brand||'',isLiq:r.isLiq,
+      per100:{kcal:r.kcal||Math.round(n['energy-kcal_100g']||0),
+        protein:+((n['proteins_100g']||0).toFixed(1)),carbs:+((n['carbohydrates_100g']||0).toFixed(1)),
+        fat:+((n['fat_100g']||0).toFixed(1)),sugar:+((n['sugars_100g']||0).toFixed(1)),fiber:+((n['fiber_100g']||0).toFixed(1))}});
+    setUnit(r.isLiq?'ml':'g'); setQty(r.isLiq?'200':'100');
+  };
+
+  const calcMacros = () => {
+    if(!selProd)return null;
+    const q=Math.max(+qty||1,1),p=selProd.per100;
+    return {kcal:Math.round((p.kcal||0)*q/100),protein:+((p.protein||0)*q/100).toFixed(1),
+            carbs:+((p.carbs||0)*q/100).toFixed(1),fat:+((p.fat||0)*q/100).toFixed(1)};
+  };
+  const macros=calcMacros();
+  const presets=selProd?.isLiq?[100,200,250,330,500]:[25,50,100,150,200];
+
+  // ── Save ──────────────────────────────────────────────────────────────────
+  const saveProduct = () => {
+    if(!selProd)return;
+    const m=macros||{kcal:0,protein:0,carbs:0,fat:0};
+    const d={water:selProd.isLiq?(+qty||0):0,mealQ:3,mealTag,calories:m.kcal,
+      protein:m.protein,carbs:m.carbs,fat:m.fat,
+      productName:selProd.name,brand:selProd.brand,quantity:+qty,unit,barcode:'',note:''};
+    onSave?onSave(d):add('ernaehrung',d,date);
+  };
+  const saveWasser = () => {
+    const d={water,mealQ,calories:cal?+cal:null,mealTag,note,productName:null,brand:''};
+    onSave?onSave(d):add('ernaehrung',d,date);
+  };
+  const saveManuell = () => {
+    const q=Math.max(+mQty||1,1);
+    const d={water:mUnit==='ml'?q:0,mealQ:3,mealTag,
+      calories:Math.round((+mKcal||0)*q/100),
+      protein:+((+mProt||0)*q/100).toFixed(1),carbs:+((+mCarb||0)*q/100).toFixed(1),
+      fat:+((+mFat||0)*q/100).toFixed(1),
+      productName:mName||'Manuell eingetragen',brand:'',quantity:q,unit:mUnit,barcode:'',note};
+    onSave?onSave(d):add('ernaehrung',d,date);
+  };
+
+  const TABS=[{id:'suche',l:'🔍 Produkt'},{id:'wasser',l:'💧 Wasser'},{id:'manuell',l:'✎ Manuell'}];
+
   return <>
-    {lookup && <ProductLookup mode={lookup} onSave={handleProduct} onClose={()=>setLU(null)}/>}
-    {!initialData && <DatePickerField value={date} onChange={setDate}/>}
+    <input ref={captureRef} type="file" accept="image/*" capture="environment"
+      onChange={handleCapture} style={{display:'none'}}/>
 
-    {/* ── Zwei direkte Buttons ───────────────────────────────────────────── */}
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
-      <button style={{background:`${C.water}14`,border:`1px solid ${C.water}50`,borderRadius:10,
-          padding:'14px 10px',display:'flex',flexDirection:'column',alignItems:'center',gap:6}}
-        onClick={()=>setLU('scan')}>
-        <span style={{fontSize:22}}>📷</span>
-        <span style={{fontSize:13,fontWeight:600,color:C.water}}>Barcode<br/>scannen</span>
-      </button>
-      <button style={{background:`${C.water}14`,border:`1px solid ${C.water}50`,borderRadius:10,
-          padding:'14px 10px',display:'flex',flexDirection:'column',alignItems:'center',gap:6}}
-        onClick={()=>setLU('search')}>
-        <span style={{fontSize:22}}>🔍</span>
-        <span style={{fontSize:13,fontWeight:600,color:C.water}}>Produkt<br/>suchen</span>
-      </button>
-    </div>
+    {!initialData&&<DatePickerField value={date} onChange={setDate}/>}
 
-    <label style={ST.lbl}>Mahlzeit (optional)</label>
+    {/* Mahlzeit-Tag */}
+    <label style={ST.lbl}>Mahlzeit</label>
     <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
       {['Frühstück','Mittagessen','Abendessen','Snack'].map(t=>(
-        <button key={t} onClick={()=>setMT(mealTag===t?'':t)} style={{padding:'5px 12px',borderRadius:6,fontSize:12,border:`1px solid ${mealTag===t?C.water:C.border}`,background:mealTag===t?`${C.water}18`:'transparent',color:mealTag===t?C.water:C.muted}}>{t}</button>
+        <button key={t} onClick={()=>setMT(mealTag===t?'':t)}
+          style={{padding:'5px 12px',borderRadius:6,fontSize:12,
+            border:`1px solid ${mealTag===t?C.water:C.border}`,
+            background:mealTag===t?`${C.water}18`:'transparent',
+            color:mealTag===t?C.water:C.muted}}>{t}</button>
       ))}
-    </div>
-    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
-      <div style={{flex:1,height:1,background:C.border}}/>
-      <span style={{fontSize:10,color:C.faint,letterSpacing:0.6}}>ODER MANUELL</span>
-      <div style={{flex:1,height:1,background:C.border}}/>
     </div>
 
-    <label style={ST.lbl}>Wasser (ml)</label>
-    <input style={ST.inp} type="number" inputMode="numeric" placeholder="0"
-      value={water===0?'':water} onChange={e=>setW(Math.max(0,+e.target.value||0))}/>
-    <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
-      {[150,200,250,330,500,750,1000].map(ml=>(
-        <button key={ml} onClick={()=>setW(ml)} style={{padding:'5px 10px',borderRadius:6,fontSize:12,
-          border:`1px solid ${water===ml?C.water:C.border}`,
-          background:water===ml?`${C.water}18`:'transparent',
-          color:water===ml?C.water:C.muted}}>{ml}</button>
+    {/* Tab-Leiste */}
+    <div style={{display:'flex',marginBottom:16,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
+      {TABS.map((t,i)=>(
+        <button key={t.id} onClick={()=>setTab(t.id)}
+          style={{flex:1,padding:'9px 4px',fontSize:11,fontWeight:tab===t.id?600:400,
+            background:tab===t.id?`${C.water}18`:'transparent',
+            color:tab===t.id?C.water:C.muted,border:'none',
+            borderRight:i<TABS.length-1?`1px solid ${C.border}`:'none'}}>
+          {t.l}
+        </button>
       ))}
     </div>
-    <label style={ST.lbl}>Ernährungsqualität — {mealQ}/5</label>
-    <input type="range" min="1" max="5" value={mealQ} onChange={e=>setMQ(+e.target.value)} style={ST.sld(C.water)} />
-    <label style={ST.lbl}>Kalorien (optional)</label>
-    <input style={ST.inp} type="number" inputMode="numeric" placeholder="2000" value={cal} onChange={e=>setCal(e.target.value)} />
-    <label style={ST.lbl}>Notiz</label>
-    <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
-    {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
-    <button style={ST.btn(C.water)} onClick={()=>{ const d={water,mealQ,calories:cal?+cal:null,note}; onSave?onSave({...d,mealTag}):add('ernaehrung',{...d,mealTag},date); }}>Speichern</button>
+
+    {/* ── TAB: SUCHE ── */}
+    {tab==='suche'&&<>
+      {!selProd?<>
+        <div style={{display:'flex',gap:8,marginBottom:8}}>
+          <input style={{...ST.inp,marginBottom:0,flex:1}}
+            placeholder="Apfel, Joghurt, Haferflocken…"
+            value={searchQ} autoComplete="off"
+            onChange={e=>{setSQ(e.target.value);handleSearch(e.target.value);}}
+            onKeyDown={e=>e.key==='Enter'&&handleSearch(searchQ)}/>
+          <button onClick={()=>captureRef.current?.click()}
+            style={{background:`${C.water}20`,border:`1px solid ${C.water}40`,
+              borderRadius:8,padding:'0 14px',color:C.water,fontSize:20,flexShrink:0,
+              cursor:'pointer'}}>📷</button>
+        </div>
+        {scanErr&&<div style={{fontSize:11,color:C.danger,marginBottom:8,padding:'6px 10px',background:`${C.danger}14`,borderRadius:6}}>{scanErr}</div>}
+        {srching&&<div style={{fontSize:11,color:C.muted,marginBottom:6}}>Suche online…</div>}
+        <div style={{maxHeight:260,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
+          {results.map(r=>(
+            <button key={(r.code||'')+r.name} onClick={()=>selectProduct(r)}
+              style={{width:'100%',background:C.cardAlt,border:`1px solid ${C.border}`,
+                borderRadius:8,padding:'10px 12px',textAlign:'left',marginBottom:5,display:'block',cursor:'pointer'}}>
+              <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',
+                textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:2}}>
+                <span style={{fontSize:11,color:C.muted}}>{r.brand||'—'}</span>
+                {r.kcal>0&&<span style={{fontSize:11,color:C.accent,fontWeight:500}}>{r.kcal} kcal/100{r.isLiq?'ml':'g'}</span>}
+              </div>
+            </button>
+          ))}
+        </div>
+        {searchQ.length>0&&results.length===0&&!srching&&(
+          <div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'12px 0'}}>Keine Treffer</div>
+        )}
+        {searchQ.length===0&&(
+          <div style={{fontSize:11,color:C.faint,textAlign:'center',padding:'10px 0',lineHeight:1.8}}>
+            Produktname tippen oder Barcode fotografieren
+          </div>
+        )}
+      </>:<>
+        {/* Produkt ausgewählt → Menge eingeben */}
+        <div style={{...ST.card,marginBottom:12,background:C.cardAlt,padding:'12px 14px'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+            <div style={{flex:1,minWidth:0,paddingRight:8}}>
+              <div style={{fontSize:14,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selProd.name}</div>
+              {selProd.brand&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{selProd.brand}</div>}
+            </div>
+            <button onClick={()=>{setSel(null);setSQ('');setRes([]);setScanE('');}}
+              style={{background:'none',border:'none',color:C.muted,fontSize:20,padding:0,cursor:'pointer',flexShrink:0}}>✕</button>
+          </div>
+        </div>
+
+        <label style={ST.lbl}>Menge</label>
+        <div style={{display:'flex',gap:8,marginBottom:8}}>
+          <input style={{...ST.inp,marginBottom:0,flex:1}} type="number" inputMode="numeric"
+            value={qty} onChange={e=>setQty(e.target.value)}/>
+          <div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',flexShrink:0}}>
+            {['g','ml'].map(u=>(
+              <button key={u} onClick={()=>setUnit(u)}
+                style={{padding:'0 14px',background:unit===u?`${C.water}20`:'transparent',
+                  color:unit===u?C.water:C.muted,border:'none',fontSize:13,fontWeight:unit===u?600:400,cursor:'pointer'}}>{u}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
+          {presets.map(q=>(
+            <button key={q} onClick={()=>setQty(String(q))}
+              style={{padding:'4px 12px',borderRadius:6,fontSize:12,cursor:'pointer',
+                border:`1px solid ${+qty===q?C.water:C.border}`,
+                background:+qty===q?`${C.water}18`:'transparent',
+                color:+qty===q?C.water:C.muted}}>{q}{unit}</button>
+          ))}
+        </div>
+
+        {macros&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:14}}>
+          {[['Kalorien',macros.kcal,'kcal',C.accent],['Eiweiß',macros.protein,'g',C.sport],
+            ['Kohlenhydrate',macros.carbs,'g',C.water],['Fett',macros.fat,'g',C.mood]
+          ].map(([l,v,u2,col])=>(
+            <div key={l} style={{background:'#0A0806',borderRadius:8,padding:'8px 10px'}}>
+              <div style={{fontSize:9,color:C.muted,letterSpacing:0.6,textTransform:'uppercase',marginBottom:2}}>{l}</div>
+              <div style={{fontSize:18,fontWeight:600,color:col,lineHeight:1}}>{v}</div>
+              <div style={{fontSize:10,color:C.muted}}>{u2}</div>
+            </div>
+          ))}
+        </div>}
+        {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
+        <button style={ST.btn(C.water)} onClick={saveProduct}>Eintragen</button>
+      </>}
+    </>}
+
+    {/* ── TAB: WASSER ── */}
+    {tab==='wasser'&&<>
+      <label style={ST.lbl}>Wasser (ml)</label>
+      <input style={ST.inp} type="number" inputMode="numeric" placeholder="0"
+        value={water===0?'':water} onChange={e=>setW(Math.max(0,+e.target.value||0))}/>
+      <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
+        {[150,200,250,330,500,750,1000].map(ml=>(
+          <button key={ml} onClick={()=>setW(ml)}
+            style={{padding:'5px 10px',borderRadius:6,fontSize:12,cursor:'pointer',
+              border:`1px solid ${water===ml?C.water:C.border}`,
+              background:water===ml?`${C.water}18`:'transparent',
+              color:water===ml?C.water:C.muted}}>{ml}</button>
+        ))}
+      </div>
+      <label style={ST.lbl}>Ernährungsqualität — {mealQ}/5</label>
+      <input type="range" min="1" max="5" value={mealQ}
+        onChange={e=>setMQ(+e.target.value)} style={ST.sld(C.water)}/>
+      <label style={ST.lbl}>Kalorien (optional)</label>
+      <input style={ST.inp} type="number" inputMode="numeric" placeholder="2000"
+        value={cal} onChange={e=>setCal(e.target.value)}/>
+      <label style={ST.lbl}>Notiz</label>
+      <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setNote(e.target.value)}/>
+      {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
+      <button style={ST.btn(C.water)} onClick={saveWasser}>Speichern</button>
+    </>}
+
+    {/* ── TAB: MANUELL ── */}
+    {tab==='manuell'&&<>
+      <label style={ST.lbl}>Produktname</label>
+      <input style={ST.inp} placeholder="z.B. Hausgemachte Pizza" value={mName} onChange={e=>setMN(e.target.value)}/>
+      <div style={ST.grid2}>
+        <div><label style={ST.lbl}>kcal / 100g</label>
+          <input style={ST.inp} type="number" inputMode="decimal" placeholder="250" value={mKcal} onChange={e=>setMK(e.target.value)}/></div>
+        <div><label style={ST.lbl}>Eiweiß (g)</label>
+          <input style={ST.inp} type="number" inputMode="decimal" placeholder="5.0" value={mProt} onChange={e=>setMP(e.target.value)}/></div>
+        <div><label style={ST.lbl}>Kohlenhydrate (g)</label>
+          <input style={ST.inp} type="number" inputMode="decimal" placeholder="30.0" value={mCarb} onChange={e=>setMC(e.target.value)}/></div>
+        <div><label style={ST.lbl}>Fett (g)</label>
+          <input style={ST.inp} type="number" inputMode="decimal" placeholder="8.0" value={mFat} onChange={e=>setMF(e.target.value)}/></div>
+      </div>
+      <div style={{fontSize:11,color:C.faint,marginTop:-6,marginBottom:14}}>Pro 100g / 100ml</div>
+      <label style={ST.lbl}>Menge</label>
+      <div style={{display:'flex',gap:8,marginBottom:14}}>
+        <input style={{...ST.inp,marginBottom:0,flex:1}} type="number" inputMode="numeric"
+          value={mQty} onChange={e=>setMQ2(e.target.value)}/>
+        <div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',flexShrink:0}}>
+          {['g','ml'].map(u=>(
+            <button key={u} onClick={()=>setMU(u)}
+              style={{padding:'0 14px',background:mUnit===u?`${C.water}20`:'transparent',
+                color:mUnit===u?C.water:C.muted,border:'none',fontSize:13,fontWeight:mUnit===u?600:400,cursor:'pointer'}}>{u}</button>
+          ))}
+        </div>
+      </div>
+      <label style={ST.lbl}>Notiz</label>
+      <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setNote(e.target.value)}/>
+      {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
+      <button style={ST.btn(C.water)} onClick={saveManuell}>Eintragen</button>
+    </>}
   </>;
 }
+
 
 function SchlafForm({ add, initialData, onSave, onClose }) {
   const [hours,setH]=useState(initialData?initialData.hours:7.5); const [quality,setQ]=useState(initialData?initialData.quality:3); const [note,setN]=useState(initialData?initialData.note||'':'');
