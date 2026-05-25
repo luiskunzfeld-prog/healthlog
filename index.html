@@ -307,32 +307,35 @@ function Bar({ color }) {
 }
 
 // ── Chart.js wrapper (fixed mobile sizing) ────────────────────────────────────
-function CJSChart({ type, labels, datasets, height=170, yMin, yMax, yTicks }) {
+function CJSChart({ type='line', labels, datasets, height=170, yMin, yMax, yTicks }) {
+  const chartType = type==='area' ? 'line' : type;
+  const isArea    = type==='area';
   const ref  = useRef(null);
   const inst = useRef(null);
-  const key  = useMemo(()=>JSON.stringify({labels,datasets}),[labels,datasets]);
+  const key  = useMemo(()=>JSON.stringify({labels,datasets,type}),[labels,datasets,type]);
 
   useEffect(()=>{
     if (!ref.current) return;
     if (inst.current) { inst.current.destroy(); inst.current=null; }
 
     inst.current = new Chart(ref.current, {
-      type,
+      type: chartType,
       data: {
         labels,
         datasets: datasets.map(ds=>({
           label: ds.label,
           data: ds.data,
           borderColor: ds.color,
-          backgroundColor: type==='bar' ? ds.color+'85' : ds.fill ? ds.color+'25' : 'transparent',
-          borderWidth: type==='bar' ? 0 : 1.5,
+          backgroundColor: chartType==='bar' ? ds.color+'85' : (isArea||ds.fill) ? ds.color+'28' : 'transparent',
+          borderWidth: chartType==='bar' ? 0 : ds.isAvg ? 1 : 1.5,
           pointBackgroundColor: ds.color,
-          pointRadius: type==='bar' ? 0 : 3,
-          pointHoverRadius: 5,
+          pointRadius: chartType==='bar' ? 0 : ds.isAvg ? 0 : 3,
+          pointHoverRadius: ds.isAvg ? 0 : 5,
           tension: 0.35,
-          fill: ds.fill||false,
-          borderRadius: type==='bar' ? [3,3,0,0] : 0,
-          borderDash: ds.dashed ? [4,3] : undefined,
+          fill: isArea || ds.fill || false,
+          borderRadius: chartType==='bar' ? [3,3,0,0] : 0,
+          borderDash: ds.dashed||ds.isAvg ? [5,4] : undefined,
+          order: ds.isAvg ? 0 : 1,
         }))
       },
       options: {
@@ -344,6 +347,7 @@ function CJSChart({ type, labels, datasets, height=170, yMin, yMax, yTicks }) {
           tooltip: {
             backgroundColor:C.cardAlt, borderColor:C.border, borderWidth:1,
             titleColor:C.muted, bodyColor:C.text, padding:9, cornerRadius:8, displayColors:false,
+            filter: item => !datasets[item.datasetIndex]?.isAvg,
           },
         },
         scales: {
@@ -363,7 +367,7 @@ function CJSChart({ type, labels, datasets, height=170, yMin, yMax, yTicks }) {
       },
     });
     return ()=>{ inst.current?.destroy(); inst.current=null; };
-  },[key, type]);
+  },[key, chartType, isArea]);
 
   // Fixed-height container — critical for mobile
   return (
@@ -373,16 +377,129 @@ function CJSChart({ type, labels, datasets, height=170, yMin, yMax, yTicks }) {
   );
 }
 
-function ChartCard({ title, color, empty, stat, children }) {
+// ── Farb-Palette für Diagramme ────────────────────────────────────────────────
+const CHART_COLORS = [
+  // Warm earth
+  '#C8B89A','#D4956A','#C87B6A','#D4A48A','#B89070',
+  // Cool blue
+  '#7A9EC8','#6A8CB8','#8AAEC8','#5A88B4','#7AA8C0',
+  // Nature green
+  '#7A9A7A','#8AAA88','#6A9478','#9AAA70','#7AB08A',
+  // Soft purple
+  '#9A7AB4','#B490B0','#8A6EA8','#A880A4','#B09AC8',
+  // Neutral warm
+  '#A09888','#C0B8A8','#907870','#B0A898','#888078',
+];
+
+function ChartCard({ title, color, empty, stat, children, chartId, chartOpts, onOptsChange, avgVal }) {
+  const [open, setOpen] = useState(false);
+  const opts = chartOpts || { type: null, color: null, showAvg: false };
+  const activeColor = opts.color || color;
+
+  const TYPES = [
+    { id: null,   label: 'Standard' },
+    { id: 'line', label: 'Linie'    },
+    { id: 'bar',  label: 'Balken'   },
+    { id: 'area', label: 'Fläche'   },
+  ];
+
+  const set = (patch) => onOptsChange && onOptsChange({ ...opts, ...patch });
+
   return (
     <div style={{ ...ST.card, marginBottom:16, padding:'16px 16px 12px' }}>
+      {/* ── Header ── */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-          <div style={{ width:3, height:14, background:color, borderRadius:2 }} />
+          <div style={{ width:3, height:14, background:activeColor, borderRadius:2 }} />
           <div style={{ fontSize:12, fontWeight:500, color:C.text }}>{title}</div>
         </div>
-        {stat && <div style={ST.pill(color)}>{stat}</div>}
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          {stat && <div style={ST.pill(activeColor)}>{stat}</div>}
+          {chartId && (
+            <button onClick={()=>setOpen(o=>!o)}
+              style={{background:open?`${C.accent}15`:'transparent',border:`1px solid ${open?C.accent:C.border}`,
+                borderRadius:6,padding:'3px 8px',fontSize:10,color:open?C.accent:C.faint,
+                cursor:'pointer',letterSpacing:0.4,fontFamily:'inherit'}}>
+              {open ? '✕' : '⚙'}
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* ── Settings Panel ── */}
+      {open && chartId && (
+        <div style={{background:C.cardAlt,borderRadius:10,padding:'14px',marginBottom:14,
+          border:`1px solid ${C.border}`}}>
+
+          {/* Diagramm-Typ */}
+          <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:8}}>
+            Diagrammtyp
+          </div>
+          <div style={{display:'flex',gap:5,marginBottom:14,flexWrap:'wrap'}}>
+            {TYPES.map(t=>(
+              <button key={String(t.id)} onClick={()=>set({type:t.id})}
+                style={{padding:'5px 12px',borderRadius:6,fontSize:11,cursor:'pointer',fontFamily:'inherit',
+                  border:`1px solid ${opts.type===t.id?C.accent:C.border}`,
+                  background:opts.type===t.id?`${C.accent}18`:'transparent',
+                  color:opts.type===t.id?C.accent:C.muted}}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Durchschnittslinie */}
+          {avgVal!=null && <>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:8}}>
+              Durchschnittslinie
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+              <button onClick={()=>set({showAvg:!opts.showAvg})}
+                style={{width:36,height:20,borderRadius:10,border:'none',cursor:'pointer',
+                  background:opts.showAvg?C.accent:C.border,position:'relative',transition:'background 0.2s',flexShrink:0}}>
+                <div style={{position:'absolute',top:3,left:opts.showAvg?18:3,width:14,height:14,
+                  borderRadius:'50%',background:'#fff',transition:'left 0.2s'}}/>
+              </button>
+              <span style={{fontSize:11,color:C.muted}}>
+                {opts.showAvg ? `Ø ${avgVal} eingeblendet` : 'Aus'}
+              </span>
+            </div>
+          </>}
+
+          {/* Farbe */}
+          <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:8}}>
+            Farbe
+          </div>
+          {/* Preset-Palette */}
+          <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:10}}>
+            {CHART_COLORS.map(c=>(
+              <button key={c} onClick={()=>set({color:c})}
+                style={{width:22,height:22,borderRadius:5,border:`2px solid ${opts.color===c?'#fff':'transparent'}`,
+                  background:c,cursor:'pointer',outline:opts.color===c?`2px solid ${c}`:'none',
+                  outlineOffset:1,flexShrink:0}}/>
+            ))}
+          </div>
+          {/* Hex + Color Picker */}
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <div style={{position:'relative',flexShrink:0}}>
+              <input type="color" value={opts.color||color}
+                onChange={e=>set({color:e.target.value})}
+                style={{width:32,height:32,borderRadius:6,border:`1px solid ${C.border}`,
+                  cursor:'pointer',background:'transparent',padding:2}}/>
+            </div>
+            <input type="text" maxLength={7}
+              value={opts.color||color}
+              onChange={e=>{ const v=e.target.value; if(/^#[0-9a-fA-F]{0,6}$/.test(v)) set({color:v}); }}
+              placeholder="#C8B89A"
+              style={{...ST.inp,marginBottom:0,flex:1,fontSize:13,fontFamily:'monospace',padding:'7px 10px'}}/>
+            <button onClick={()=>set({color:null})}
+              style={{fontSize:11,color:C.faint,background:'none',border:`1px solid ${C.border}`,
+                borderRadius:6,padding:'6px 10px',cursor:'pointer',flexShrink:0,fontFamily:'inherit'}}>
+              Reset
+            </button>
+          </div>
+        </div>
+      )}
+
       {empty
         ? <div style={{ textAlign:'center', color:C.muted, fontSize:12, padding:'20px 0' }}>Keine Daten im Zeitraum</div>
         : children}
@@ -2670,107 +2787,143 @@ function App() {
     const [order,    setOrderLocal] = useState(()=>settings.chartOrder||DEFAULT_ORDER);
     const [editMode, setEditMode]   = useState(false);
 
+    // ── Chart-Settings (Farbe, Typ, Avg) pro Diagramm ──────────────────────
+    const chartSettings = settings.chartSettings || {};
+    const getOpts = id => chartSettings[id] || { type:null, color:null, showAvg:false };
+    const setOpts = (id, patch) => {
+      const next = { ...chartSettings, [id]: { ...getOpts(id), ...patch } };
+      setSettings(s => ({ ...s, chartSettings: next }));
+    };
+
+    // Avg-Hilfsfunktion: fügt horizontale Avg-Linie als Dataset ein
+    const withAvg = (datasets, avgValue, color) => {
+      if (!avgValue || !datasets[0]?.data?.length) return datasets;
+      const n = datasets[0].data.length;
+      return [...datasets, {
+        label:'Ø Durchschnitt', data:Array(n).fill(avgValue),
+        color: color+'AA', isAvg:true,
+      }];
+    };
+
     const renderChart = (id) => {
+      const opts = getOpts(id);
+      const col  = opts.color || CHART_DEFS.find(d=>d.id===id)?.color || C.accent;
+      const cType = opts.type; // null = default, or 'line'/'bar'/'area'
+
+      const CC = (props) => (
+        <ChartCard {...props} chartId={id} chartOpts={opts}
+          onOptsChange={patch=>setOpts(id,patch)}
+          avgVal={props.avgVal}/>
+      );
+
       switch(id) {
-        case 'gewicht': return (
-          <ChartCard key="gewicht" title="Gewichtsverlauf (kg)" color={C.accent} empty={!gwE.length} stat={wAvg?`Ø ${wAvg} kg`:null}>
-            <CJSChart type="line" height={170} labels={gwE.map(e=>fmtD(e.date))}
-              datasets={[{label:'Gewicht (kg)',data:gwE.map(e=>e.data.weight),color:C.accent,fill:true}]}/>
-          </ChartCard>
-        );
-        case 'sport': return (
-          <ChartCard key="sport" title="Sportaktivität (Minuten)" color={C.sport} empty={!spE.length} stat={sSum?`${sSum} min`:null}>
-            <CJSChart type="bar" height={170} labels={spE.map(e=>fmtD(e.date))}
-              datasets={[{label:'Dauer (min)',data:spE.map(e=>e.min),color:C.sport}]}/>
-          </ChartCard>
-        );
-        case 'stimmung': return (
-          <ChartCard key="stimmung" title="Stimmung, Energie & Stress" color={C.mood} empty={!stE.length} stat={mAvg?`Ø ${mAvg}/10`:null}>
-            <CJSChart type="line" height={170} yMin={1} yMax={10} yTicks={[1,5,10]}
-              labels={stE.map(e=>fmtD(e.date))}
-              datasets={[
-                {label:'Stimmung',data:stE.map(e=>e.data.mood),color:C.mood},
-                {label:'Energie', data:stE.map(e=>e.data.energy),color:C.sport},
-                {label:'Stress',  data:stE.map(e=>e.data.stress),color:C.danger,dashed:true},
-              ]}/>
+        case 'gewicht': {
+          const avV = wAvg;
+          const ds = withAvg([{label:'Gewicht (kg)',data:gwE.map(e=>e.data.weight),color:col,fill:cType==='area'}], opts.showAvg?avV:null, col);
+          return <CC key="gewicht" title="Gewichtsverlauf (kg)" color={col} empty={!gwE.length} stat={wAvg?`Ø ${wAvg} kg`:null} avgVal={avV}>
+            <CJSChart type={cType||'line'} height={170} labels={gwE.map(e=>fmtD(e.date))} datasets={ds}/>
+          </CC>;
+        }
+        case 'sport': {
+          const avV = sSum ? Math.round(sSum/spE.length) : null;
+          const ds = withAvg([{label:'Dauer (min)',data:spE.map(e=>e.min),color:col}], opts.showAvg?avV:null, col);
+          return <CC key="sport" title="Sportaktivität (Minuten)" color={col} empty={!spE.length} stat={sSum?`${sSum} min`:null} avgVal={avV}>
+            <CJSChart type={cType||'bar'} height={170} labels={spE.map(e=>fmtD(e.date))} datasets={ds}/>
+          </CC>;
+        }
+        case 'stimmung': {
+          const avV = mAvg;
+          const moodDs = [
+            {label:'Stimmung',data:stE.map(e=>e.data.mood),color:opts.color||C.mood},
+            {label:'Energie', data:stE.map(e=>e.data.energy),color:C.sport},
+            {label:'Stress',  data:stE.map(e=>e.data.stress),color:C.danger,dashed:true},
+          ];
+          const ds = opts.showAvg ? [...moodDs,{label:'Ø Stimmung',data:Array(stE.length).fill(avV),color:(opts.color||C.mood)+'AA',isAvg:true}] : moodDs;
+          return <CC key="stimmung" title="Stimmung, Energie & Stress" color={opts.color||C.mood} empty={!stE.length} stat={mAvg?`Ø ${mAvg}/10`:null} avgVal={avV}>
+            <CJSChart type={cType||'line'} height={170} yMin={1} yMax={10} yTicks={[1,5,10]} labels={stE.map(e=>fmtD(e.date))} datasets={ds}/>
             <div style={{display:'flex',gap:14,marginTop:10,fontSize:11}}>
-              <span style={{color:C.mood}}>— Stimmung</span>
+              <span style={{color:opts.color||C.mood}}>— Stimmung</span>
               <span style={{color:C.sport}}>— Energie</span>
               <span style={{color:C.danger}}>- - Stress</span>
             </div>
-          </ChartCard>
-        );
-        case 'wasser': return (
-          <ChartCard key="wasser" title="Wasseraufnahme (ml / Tag)" color={C.water} empty={!wtE.length} stat={wlAvg?`Ø ${wlAvg} ml`:null}>
-            <CJSChart type="bar" height={170} labels={wtE.map(e=>fmtD(e.date))}
-              datasets={[{label:'Wasser (ml)',data:wtE.map(e=>e.ml),color:C.water}]}/>
+          </CC>;
+        }
+        case 'wasser': {
+          const avV = wlAvg;
+          const ds = withAvg([{label:'Wasser (ml)',data:wtE.map(e=>e.ml),color:col}], opts.showAvg?avV:null, col);
+          return <CC key="wasser" title="Wasseraufnahme (ml / Tag)" color={col} empty={!wtE.length} stat={wlAvg?`Ø ${wlAvg} ml`:null} avgVal={avV}>
+            <CJSChart type={cType||'bar'} height={170} labels={wtE.map(e=>fmtD(e.date))} datasets={ds}/>
             <div style={{marginTop:8,fontSize:11,color:C.muted}}>Empfehlung: mind. 2.000 ml / Tag</div>
-          </ChartCard>
-        );
-        case 'schlaf': return (
-          <ChartCard key="schlaf" title="Schlafdauer (Stunden)" color={C.sleep} empty={!slE.length} stat={slAvg?`Ø ${slAvg} Std`:null}>
-            <CJSChart type="bar" height={170} yMin={0} yMax={12}
-              labels={slE.map(e=>fmtD(e.date))}
-              datasets={[{label:'Schlaf (Std)',data:slE.map(e=>e.data.hours),color:C.sleep}]}/>
+          </CC>;
+        }
+        case 'schlaf': {
+          const avV = slAvg;
+          const ds = withAvg([{label:'Schlaf (Std)',data:slE.map(e=>e.data.hours),color:col}], opts.showAvg?avV:null, col);
+          return <CC key="schlaf" title="Schlafdauer (Stunden)" color={col} empty={!slE.length} stat={slAvg?`Ø ${slAvg} Std`:null} avgVal={avV}>
+            <CJSChart type={cType||'bar'} height={170} yMin={0} yMax={12} labels={slE.map(e=>fmtD(e.date))} datasets={ds}/>
             <div style={{marginTop:8,fontSize:11,color:C.muted}}>Empfehlung: 7–9 Stunden / Nacht</div>
-          </ChartCard>
-        );
-        case 'schritte': return (
-          <ChartCard key="schritte" title="Schritte pro Tag" color={C.steps} empty={!scE.length} stat={scAvg?`Ø ${scAvg.toLocaleString('de-DE')}`:null}>
-            <CJSChart type="bar" height={170} labels={scE.map(e=>fmtD(e.date))}
-              datasets={[{label:'Schritte',data:scE.map(e=>e.steps),color:C.steps}]}/>
+          </CC>;
+        }
+        case 'schritte': {
+          const avV = scAvg;
+          const ds = withAvg([{label:'Schritte',data:scE.map(e=>e.steps),color:col}], opts.showAvg?avV:null, col);
+          return <CC key="schritte" title="Schritte pro Tag" color={col} empty={!scE.length} stat={scAvg?`Ø ${scAvg.toLocaleString('de-DE')}`:null} avgVal={avV}>
+            <CJSChart type={cType||'bar'} height={170} labels={scE.map(e=>fmtD(e.date))} datasets={ds}/>
             <div style={{marginTop:8,fontSize:11,color:C.muted}}>Empfehlung: 8.000–10.000 Schritte / Tag</div>
-          </ChartCard>
-        );
-        case 'kalorien': return (
-          <ChartCard key="kalorien" title="Kalorien aus Lebensmitteln (kcal)" color={C.accent} empty={!calE.length} stat={calAvg?`Ø ${calAvg} kcal`:null}>
-            <CJSChart type="bar" height={170} labels={calE.map(e=>fmtD(e.date))}
-              datasets={[{label:'Kalorien (kcal)',data:calE.map(e=>e.kcal),color:C.accent}]}/>
+          </CC>;
+        }
+        case 'kalorien': {
+          const avV = calAvg;
+          const ds = withAvg([{label:'Kalorien (kcal)',data:calE.map(e=>e.kcal),color:col}], opts.showAvg?avV:null, col);
+          return <CC key="kalorien" title="Kalorien aus Lebensmitteln (kcal)" color={col} empty={!calE.length} stat={calAvg?`Ø ${calAvg} kcal`:null} avgVal={avV}>
+            <CJSChart type={cType||'bar'} height={170} labels={calE.map(e=>fmtD(e.date))} datasets={ds}/>
             <div style={{marginTop:8,fontSize:11,color:C.muted}}>Nur aus gescannten / eingetragenen Produkten</div>
-          </ChartCard>
-        );
-        case 'herz': return (
-          <ChartCard key="herz" title="Herzfrequenz (bpm)" color={C.heart} empty={!herzE.length}
-            stat={herzE.length?`Ø ${Math.round(herzE.reduce((s,e)=>s+e.data.bpm,0)/herzE.length)} bpm`:null}>
-            <CJSChart type="line" height={170} yMin={40}
-              labels={herzE.map(e=>fmtD(e.date))}
-              datasets={[{label:'Herzfrequenz (bpm)',data:herzE.map(e=>e.data.bpm),color:C.heart,fill:false}]}/>
+          </CC>;
+        }
+        case 'herz': {
+          const hAvg = herzE.length?Math.round(herzE.reduce((s,e)=>s+e.data.bpm,0)/herzE.length):null;
+          const ds = withAvg([{label:'Herzfrequenz (bpm)',data:herzE.map(e=>e.data.bpm),color:col,fill:false}], opts.showAvg?hAvg:null, col);
+          return <CC key="herz" title="Herzfrequenz (bpm)" color={col} empty={!herzE.length} stat={hAvg?`Ø ${hAvg} bpm`:null} avgVal={hAvg}>
+            <CJSChart type={cType||'line'} height={170} yMin={40} labels={herzE.map(e=>fmtD(e.date))} datasets={ds}/>
             <div style={{marginTop:8,fontSize:11,color:C.muted}}>Normalbereich: 60–100 bpm in Ruhe</div>
-          </ChartCard>
-        );
-        case 'blutdruck': return (
-          <ChartCard key="blutdruck" title="Blutdruck (mmHg)" color={C.bp} empty={!bpE.length}
-            stat={bpE.length?`${Math.round(bpE.reduce((s,e)=>s+e.data.sys,0)/bpE.length)}/${Math.round(bpE.reduce((s,e)=>s+e.data.dia,0)/bpE.length)} Ø`:null}>
-            <CJSChart type="line" height={170} yMin={50}
-              labels={bpE.map(e=>fmtD(e.date))}
-              datasets={[
-                {label:'Systolisch', data:bpE.map(e=>e.data.sys),color:C.bp},
-                {label:'Diastolisch',data:bpE.map(e=>e.data.dia),color:C.heart,dashed:true},
-              ]}/>
+          </CC>;
+        }
+        case 'blutdruck': {
+          const sysAvg = bpE.length?Math.round(bpE.reduce((s,e)=>s+e.data.sys,0)/bpE.length):null;
+          const diaAvg = bpE.length?Math.round(bpE.reduce((s,e)=>s+e.data.dia,0)/bpE.length):null;
+          const bpDs = [
+            {label:'Systolisch', data:bpE.map(e=>e.data.sys),color:opts.color||C.bp},
+            {label:'Diastolisch',data:bpE.map(e=>e.data.dia),color:C.heart,dashed:true},
+          ];
+          const ds = opts.showAvg ? [...bpDs,
+            {label:'Ø Sys',data:Array(bpE.length).fill(sysAvg),color:(opts.color||C.bp)+'AA',isAvg:true},
+            {label:'Ø Dia',data:Array(bpE.length).fill(diaAvg),color:C.heart+'AA',isAvg:true},
+          ] : bpDs;
+          return <CC key="blutdruck" title="Blutdruck (mmHg)" color={opts.color||C.bp} empty={!bpE.length} stat={sysAvg?`${sysAvg}/${diaAvg} Ø`:null} avgVal={sysAvg?`${sysAvg}/${diaAvg}`:null}>
+            <CJSChart type={cType||'line'} height={170} yMin={50} labels={bpE.map(e=>fmtD(e.date))} datasets={ds}/>
             <div style={{display:'flex',gap:14,marginTop:10,fontSize:11}}>
-              <span style={{color:C.bp}}>— Systolisch</span>
+              <span style={{color:opts.color||C.bp}}>— Systolisch</span>
               <span style={{color:C.heart}}>- - Diastolisch</span>
             </div>
             <div style={{marginTop:6,fontSize:11,color:C.muted}}>Optimal: &lt;120/80 mmHg</div>
-          </ChartCard>
-        );
-        case 'koerper': return massE.length>0 ? (
-          <ChartCard key="koerper" title="Körpermaße (cm)" color={C.mass} empty={false}
-            stat={massE.at(-1)?.data.whr?`WHR ${massE.at(-1).data.whr}`:null}>
-            <CJSChart type="line" height={170}
-              labels={massE.map(e=>fmtD(e.date))}
-              datasets={[
-                ...(massE.some(e=>e.data.taille)?[{label:'Taille',data:massE.map(e=>e.data.taille),color:C.mass}]:[]),
-                ...(massE.some(e=>e.data.hufte) ?[{label:'Hüfte', data:massE.map(e=>e.data.hufte), color:C.accent,dashed:true}]:[]),
-                ...(massE.some(e=>e.data.arm)   ?[{label:'Arm',   data:massE.map(e=>e.data.arm),   color:C.muted}]:[]),
-              ]}/>
+          </CC>;
+        }
+        case 'koerper': return massE.length>0 ? (() => {
+          const tAvg = massE.some(e=>e.data.taille)?Math.round(avg(massE.filter(e=>e.data.taille).map(e=>e.data.taille))*10)/10:null;
+          const massDs = [
+            ...(massE.some(e=>e.data.taille)?[{label:'Taille',data:massE.map(e=>e.data.taille),color:col}]:[]),
+            ...(massE.some(e=>e.data.hufte) ?[{label:'Hüfte', data:massE.map(e=>e.data.hufte), color:C.accent,dashed:true}]:[]),
+            ...(massE.some(e=>e.data.arm)   ?[{label:'Arm',   data:massE.map(e=>e.data.arm),   color:C.muted}]:[]),
+          ];
+          return <CC key="koerper" title="Körpermaße (cm)" color={col} empty={false} stat={massE.at(-1)?.data.whr?`WHR ${massE.at(-1).data.whr}`:null} avgVal={tAvg}>
+            <CJSChart type={cType||'line'} height={170} labels={massE.map(e=>fmtD(e.date))} datasets={massDs}/>
             <div style={{display:'flex',gap:14,marginTop:10,fontSize:11,flexWrap:'wrap'}}>
-              <span style={{color:C.mass}}>— Taille</span>
+              <span style={{color:col}}>— Taille</span>
               <span style={{color:C.accent}}>- - Hüfte</span>
               <span style={{color:C.muted}}>— Arm</span>
             </div>
-          </ChartCard>
-        ) : null;
+          </CC>;
+        })() : null;
         default: return null;
       }
     };
@@ -3119,7 +3272,7 @@ function App() {
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>{entries.length} Einträge · lokal gespeichert</span>
-          <span style={{color:C.faint}}>v4.8</span>
+          <span style={{color:C.faint}}>v4.9</span>
         </div>
       </header>
 
@@ -3157,11 +3310,11 @@ function App() {
       )}
 
       <nav style={{flexShrink:0,background:C.bg,borderTop:`1px solid ${C.border}`,display:'flex',
-        padding:`12px 0 calc(16px + ${bot})`}}>
+        padding:`8px 0 calc(8px + ${bot})`}}>
         {NAV.map(n=>(
           <button key={n.id} onClick={()=>setTab(n.id)}
-            style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:5,
-              background:'none',border:'none',padding:'6px 0',minHeight:52,cursor:'pointer',
+            style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4,
+              background:'none',border:'none',padding:'4px 0',minHeight:44,cursor:'pointer',
               WebkitTapHighlightColor:'transparent'}}>
             <div style={{width:4,height:4,borderRadius:'50%',
               background:tab===n.id?C.accent:'transparent',transition:'background 0.2s'}}/>
