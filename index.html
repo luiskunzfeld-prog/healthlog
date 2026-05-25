@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="HealthLog" />
   <meta name="theme-color" content="#0A0806" />
-  <link rel="manifest" href="manifest.json" />
+  <link rel="manifest" href="./manifest.json" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet" />
   <style>
@@ -45,6 +45,7 @@ const C = {
   accent:'#C8B89A', sport:'#9A8462', mood:'#A09080', water:'#B4ACA0',
   sleep:'#8A7E96', steps:'#7A9080', text:'#EAE0D0', muted:'#6A6058', faint:'#3A3028',
   danger:'#B87060', success:'#7A9A7A',
+  heart:'#D07878', bp:'#9A6890', mass:'#6890A0',
 };
 
 const METRICS = {
@@ -53,7 +54,10 @@ const METRICS = {
   stimmung:   { label:'Stimmung',  unit:'/10',     color:C.mood   },
   ernaehrung: { label:'Ernährung', unit:'ml',      color:C.water  },
   schlaf:     { label:'Schlaf',    unit:'Std',     color:C.sleep  },
-  schritte:   { label:'Schritte',  unit:'Schr.',   color:C.steps  },
+  schritte:    { label:'Schritte',    unit:'Schr.',   color:C.steps  },
+  herz:        { label:'Herzfrequenz', unit:'bpm',     color:C.heart  },
+  blutdruck:   { label:'Blutdruck',    unit:'mmHg',    color:C.bp     },
+  koerpermass: { label:'Körpermaße',   unit:'cm',      color:C.mass   },
 };
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
@@ -118,7 +122,7 @@ const LMDB = [
   {n:'Haferflocken',        b:'',        k:372, p:13.0, c:59.0, f:7.0,  fi:10.0,s:1.0,  liq:false, cat:'Brot & Getreide'},
   {n:'Müsli (ungesüßt)',    b:'',        k:350, p:9.5,  c:59.0, f:6.5,  fi:8.0, s:8.0,  liq:false, cat:'Brot & Getreide'},
   {n:'Granola',             b:'',        k:420, p:7.0,  c:65.0, f:14.0, fi:5.0, s:20.0, liq:false, cat:'Brot & Getreide'},
-  {n:'Cornflakes',          b:'Kellogg\'s',k:376,p:7.5, c:84.0, f:1.5,  fi:2.5, s:8.0,  liq:false, cat:'Brot & Getreide'},
+  {n:'Cornflakes',          b:"Kellogg's",k:376,p:7.5, c:84.0, f:1.5,  fi:2.5, s:8.0,  liq:false, cat:'Brot & Getreide'},
   {n:'Pasta (roh)',         b:'',        k:357, p:13.0, c:71.0, f:1.8,  fi:2.8, s:3.0,  liq:false, cat:'Brot & Getreide'},
   {n:'Pasta (gekocht)',     b:'',        k:131, p:4.8,  c:26.0, f:0.9,  fi:1.8, s:0.4,  liq:false, cat:'Brot & Getreide'},
   {n:'Reis (roh)',          b:'',        k:356, p:7.1,  c:78.0, f:0.7,  fi:1.0, s:0.1,  liq:false, cat:'Brot & Getreide'},
@@ -195,8 +199,8 @@ const LMDB = [
   {n:'Snickers 50g',              b:'Mars',       k:488, p:8.1, c:59.0, f:24.0, fi:1.1, s:46.0, liq:false, cat:'Süßes & Snacks', ean:'5000159461122'},
   {n:'Twix 50g',                  b:'Mars',       k:498, p:4.7, c:65.0, f:23.0, fi:0.9, s:42.0, liq:false, cat:'Süßes & Snacks', ean:'5000159412048'},
   {n:'Haribo Goldbären 200g',     b:'Haribo',    k:343, p:6.0, c:77.0, f:0.5,  fi:0,   s:43.0, liq:false, cat:'Süßes & Snacks', ean:'4001686399057'},
-  {n:'Pringles Original 165g',    b:'Kellogg's', k:527, p:5.6, c:53.0, f:32.0, fi:2.8, s:1.5,  liq:false, cat:'Süßes & Snacks', ean:'5053990101871'},
-  {n:'Lay's Classic 150g',       b:'PepsiCo',   k:536, p:6.5, c:52.0, f:33.0, fi:4.5, s:0.7,  liq:false, cat:'Süßes & Snacks', ean:'5900259128829'},
+  {n:'Pringles Original 165g',    b:"Kellogg's", k:527, p:5.6, c:53.0, f:32.0, fi:2.8, s:1.5,  liq:false, cat:'Süßes & Snacks', ean:'5053990101871'},
+  {n:"Lay's Classic 150g",       b:'PepsiCo',   k:536, p:6.5, c:52.0, f:33.0, fi:4.5, s:0.7,  liq:false, cat:'Süßes & Snacks', ean:'5900259128829'},
   {n:'Coca-Cola 330ml Dose',      b:'Coca-Cola', k:42,  p:0,   c:10.6, f:0,    fi:0,   s:10.6, liq:true,  cat:'Getränke',       ean:'5449000000996'},
   {n:'Coca-Cola Zero 330ml',      b:'Coca-Cola', k:1,   p:0,   c:0.1,  f:0,    fi:0,   s:0.1,  liq:true,  cat:'Getränke',       ean:'5449000133328'},
   {n:'Red Bull 250ml',            b:'Red Bull',  k:46,  p:0.4, c:11.0, f:0,    fi:0,   s:11.0, liq:true,  cat:'Getränke',       ean:'90162885'},
@@ -208,7 +212,7 @@ const LMDB = [
   {n:'Arla Skyr Vanille 450g',    b:'Arla',      k:77,  p:10.0,c:7.8,  f:0.2,  fi:0,   s:6.4,  liq:false, cat:'Milch & Käse',   ean:'5707168000038'},
   {n:'Müller Fruchtzwerg 100g',   b:'Müller',    k:98,  p:2.9, c:14.0, f:3.2,  fi:0,   s:13.0, liq:false, cat:'Milch & Käse',   ean:'4025500056018'},
   {n:'Chiquita Banane',           b:'Chiquita',  k:89,  p:1.1, c:23.0, f:0.3,  fi:2.6, s:12.0, liq:false, cat:'Obst',           ean:'4011200296908'},
-  {n:'Kellogg's Cornflakes 375g',b:'Kellogg's',k:376, p:7.5, c:84.0, f:1.5,  fi:2.5, s:8.0,  liq:false, cat:'Brot & Getreide',ean:'5053827190085'},
+  {n:"Kellogg's Cornflakes 375g",b:"Kellogg's",k:376, p:7.5, c:84.0, f:1.5,  fi:2.5, s:8.0,  liq:false, cat:'Brot & Getreide',ean:'5053827190085'},
   {n:'Nestlé Cheerios 300g',      b:'Nestlé',    k:376, p:10.0,c:72.0, f:5.0,  fi:10.0,s:12.0, liq:false, cat:'Brot & Getreide',ean:'7613034898333'},
   {n:'Dr. Oetker Ristorante Spec.',b:'Dr. Oetker',k:213,p:10.0,c:23.0, f:9.0,  fi:1.5, s:2.0,  liq:false, cat:'Fertigprodukte',  ean:'4001724832034'},
   {n:'Iglo Fischstäbchen 400g',   b:'Iglo',      k:195, p:12.0,c:17.0, f:8.0,  fi:1.0, s:0.5,  liq:false, cat:'Fleisch & Fisch', ean:'4250241806013'},
@@ -517,6 +521,7 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
   const [cal,setCal]  = useState(initialData&&initialData.calories!=null?String(initialData.calories):'');
   const [note,setN]   = useState(initialData?initialData.note||'':'');
   const [lookup,setLU]= useState(null); // null | 'scan' | 'search'
+  const [mealTag,setMT]= useState(initialData?.mealTag||'');
   const [date,setDate]= useState(toDay());
 
   const handleProduct = data => {
@@ -544,6 +549,12 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
       </button>
     </div>
 
+    <label style={ST.lbl}>Mahlzeit (optional)</label>
+    <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
+      {['Frühstück','Mittagessen','Abendessen','Snack'].map(t=>(
+        <button key={t} onClick={()=>setMT(mealTag===t?'':t)} style={{padding:'5px 12px',borderRadius:6,fontSize:12,border:`1px solid ${mealTag===t?C.water:C.border}`,background:mealTag===t?`${C.water}18`:'transparent',color:mealTag===t?C.water:C.muted}}>{t}</button>
+      ))}
+    </div>
     <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
       <div style={{flex:1,height:1,background:C.border}}/>
       <span style={{fontSize:10,color:C.faint,letterSpacing:0.6}}>ODER MANUELL</span>
@@ -568,7 +579,7 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
     <label style={ST.lbl}>Notiz</label>
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
     {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
-    <button style={ST.btn(C.water)} onClick={()=>{ const d={water,mealQ,calories:cal?+cal:null,note}; onSave?onSave(d):add('ernaehrung',d,date); }}>Speichern</button>
+    <button style={ST.btn(C.water)} onClick={()=>{ const d={water,mealQ,calories:cal?+cal:null,note}; onSave?onSave({...d,mealTag}):add('ernaehrung',{...d,mealTag},date); }}>Speichern</button>
   </>;
 }
 
@@ -603,6 +614,108 @@ function SchrittForm({ add, initialData, onSave, onClose }) {
   </>;
 }
 
+
+
+// ── HerzForm ──────────────────────────────────────────────────────────────────
+function classifyHR(bpm) {
+  if(bpm<40)  return {label:'Stark bradykard',  color:'#B87060'};
+  if(bpm<60)  return {label:'Bradykardie',       color:'#D0A060'};
+  if(bpm<=100)return {label:'Normal',            color:'#7A9A7A'};
+  if(bpm<=120)return {label:'Erhöht',            color:'#D0A060'};
+  return             {label:'Tachykardie',       color:'#B87060'};
+}
+function HerzForm({ add, initialData, onSave, onClose }) {
+  const ctx=['Ruhe','Nach Sport','Aufwachen','Sonstiges'];
+  const [bpm,setBpm]=useState(initialData?String(initialData.bpm):'');
+  const [context,setCtx]=useState(initialData?.context||'Ruhe');
+  const [note,setN]=useState(initialData?.note||'');
+  const [date,setDate]=useState(toDay());
+  const cls=bpm?classifyHR(+bpm):null;
+  return <>
+    {!initialData&&<DatePickerField value={date} onChange={setDate}/>}
+    <label style={ST.lbl}>Herzfrequenz (bpm)</label>
+    <input style={ST.inp} type="number" inputMode="numeric" placeholder="72" value={bpm} onChange={e=>setBpm(e.target.value)}/>
+    {cls&&<div style={{fontSize:12,color:cls.color,marginTop:-8,marginBottom:12,fontWeight:500}}>{cls.label}</div>}
+    <label style={ST.lbl}>Kontext</label>
+    <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
+      {ctx.map(t=><button key={t} onClick={()=>setCtx(t)} style={{padding:'5px 12px',borderRadius:6,fontSize:12,border:`1px solid ${context===t?C.heart:C.border}`,background:context===t?`${C.heart}18`:'transparent',color:context===t?C.heart:C.muted}}>{t}</button>)}
+    </div>
+    <label style={ST.lbl}>Notiz</label>
+    <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)}/>
+    {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
+    <button style={ST.btn(C.heart)} onClick={()=>{if(!bpm)return;const d={bpm:+bpm,context,category:cls?.label||'',note};onSave?onSave(d):add('herz',d,date);}}>Speichern</button>
+  </>;
+}
+
+// ── BlutdruckForm ─────────────────────────────────────────────────────────────
+function classifyBP(sys,dia) {
+  if(sys<120&&dia<80)  return {label:'Optimal',         color:'#7A9A7A'};
+  if(sys<130&&dia<85)  return {label:'Normal',           color:'#7A9A7A'};
+  if(sys<140&&dia<90)  return {label:'Hoch-Normal',      color:'#A09A60'};
+  if(sys<160&&dia<100) return {label:'Hypertonie Grad 1',color:'#D0A060'};
+  if(sys<180&&dia<110) return {label:'Hypertonie Grad 2',color:'#C07050'};
+  return                      {label:'Hypertonie Grad 3',color:'#B87060'};
+}
+function BlutdruckForm({ add, initialData, onSave, onClose }) {
+  const [sys,setSys]=useState(initialData?String(initialData.sys):'');
+  const [dia,setDia]=useState(initialData?String(initialData.dia):'');
+  const [pulse,setPulse]=useState(initialData?.pulse?String(initialData.pulse):'');
+  const [note,setN]=useState(initialData?.note||'');
+  const [date,setDate]=useState(toDay());
+  const cls=(sys&&dia)?classifyBP(+sys,+dia):null;
+  return <>
+    {!initialData&&<DatePickerField value={date} onChange={setDate}/>}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+      <div>
+        <label style={ST.lbl}>Systolisch</label>
+        <input style={ST.inp} type="number" inputMode="numeric" placeholder="120" value={sys} onChange={e=>setSys(e.target.value)}/>
+      </div>
+      <div>
+        <label style={ST.lbl}>Diastolisch</label>
+        <input style={ST.inp} type="number" inputMode="numeric" placeholder="80" value={dia} onChange={e=>setDia(e.target.value)}/>
+      </div>
+    </div>
+    {cls&&<div style={{fontSize:12,color:cls.color,marginTop:-8,marginBottom:12,fontWeight:500}}>{cls.label}</div>}
+    <label style={ST.lbl}>Puls (optional)</label>
+    <input style={ST.inp} type="number" inputMode="numeric" placeholder="70" value={pulse} onChange={e=>setPulse(e.target.value)}/>
+    <label style={ST.lbl}>Notiz</label>
+    <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)}/>
+    {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
+    <button style={ST.btn(C.bp)} onClick={()=>{if(!sys||!dia)return;const d={sys:+sys,dia:+dia,pulse:pulse?+pulse:null,classification:cls?.label||'',note};onSave?onSave(d):add('blutdruck',d,date);}}>Speichern</button>
+  </>;
+}
+
+// ── KoerpermassForm ────────────────────────────────────────────────────────────
+function KoerpermassForm({ add, initialData, onSave, onClose }) {
+  const [taille,setT]=useState(initialData?String(initialData.taille||''):'');
+  const [hufte,setH]=useState(initialData?String(initialData.hufte||''):'');
+  const [brust,setBr]=useState(initialData?String(initialData.brust||''):'');
+  const [arm,setAr]=useState(initialData?String(initialData.arm||''):'');
+  const [note,setN]=useState(initialData?.note||'');
+  const [date,setDate]=useState(toDay());
+  const whr=(taille&&hufte)?+(+taille/+hufte).toFixed(2):null;
+  const whrLabel=whr?(whr<0.85?'Gut':'Erhöhtes Risiko'):null;
+  return <>
+    {!initialData&&<DatePickerField value={date} onChange={setDate}/>}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+      {[['Taille (cm)',taille,setT],['Hüfte (cm)',hufte,setH],['Brust (cm)',brust,setBr],['Arm (cm)',arm,setAr]].map(([l,v,fn])=>(
+        <div key={l}>
+          <label style={ST.lbl}>{l}</label>
+          <input style={ST.inp} type="number" step="0.1" inputMode="decimal" placeholder="—" value={v} onChange={e=>fn(e.target.value)}/>
+        </div>
+      ))}
+    </div>
+    {whr&&<div style={{fontSize:12,color:whr<0.85?C.success:C.danger,marginTop:-8,marginBottom:12}}>WHR {whr} — {whrLabel}</div>}
+    <label style={ST.lbl}>Notiz</label>
+    <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)}/>
+    {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
+    <button style={ST.btn(C.mass,'#EAE0D0')} onClick={()=>{
+      if(!taille&&!hufte&&!brust&&!arm)return;
+      const d={taille:taille?+taille:null,hufte:hufte?+hufte:null,brust:brust?+brust:null,arm:arm?+arm:null,whr,note};
+      onSave?onSave(d):add('koerpermass',d,date);
+    }}>Speichern</button>
+  </>;
+}
 
 // ── Barcode-Erkennung: BarcodeDetector → ZXing BrowserMultiFormatReader ────
 async function detectFromImage(imageEl) {
@@ -1066,7 +1179,10 @@ function preview(e) {
   if(e.type==='gewicht')    return `${d.weight} kg${d.bmi?`  ·  BMI ${d.bmi}`:''}`;
   if(e.type==='sport')      return `${d.sportType}  ·  ${d.duration} min`;
   if(e.type==='stimmung')   return `Stimmung ${d.mood}/10  ·  Energie ${d.energy}/10`;
-  if(e.type==='ernaehrung') { if(d.productName) return `${d.productName}${d.calories?' · '+d.calories+' kcal':''}`; return `${d.water} ml Wasser`; }
+  if(e.type==='ernaehrung') { const tag=d.mealTag?d.mealTag+' · ':''; if(d.productName) return `${tag}${d.productName}${d.calories?' · '+d.calories+' kcal':''}`; return `${tag}${d.water} ml Wasser`; }
+  if(e.type==='herz')        return `${d.bpm} bpm${d.context?' · '+d.context:''}  ·  ${d.category||''}`;
+  if(e.type==='blutdruck')   return `${d.sys}/${d.dia} mmHg${d.pulse?' · '+d.pulse+' bpm':''}  ·  ${d.classification||''}`;
+  if(e.type==='koerpermass') { const parts=[]; if(d.taille)parts.push('Taille '+d.taille+'cm'); if(d.hufte)parts.push('Hüfte '+d.hufte+'cm'); if(d.whr)parts.push('WHR '+d.whr); return parts.join('  ·  ')||'Maße eingetragen'; }
   if(e.type==='schlaf')     return `${d.hours} Std  ·  Qualität ${d.quality}/5`;
   if(e.type==='schritte')   return `${d.steps.toLocaleString('de-DE')} Schritte`;
   return '';
@@ -1565,7 +1681,7 @@ function HealthImport({ onImport, settings }) {
 function App() {
   const [tab,setTab]           = useState('dashboard');
   const [entries,setEntries]   = useState(()=>store.get('entries')||[]);
-  const [settings,setSettings] = useState(()=>store.get('settings')||{height:175});
+  const [settings,setSettings] = useState(()=>store.get('settings')||{height:175,kalorienZiel:2000,wasserZiel:2000});
   const [activeForm,setAF]     = useState(null);
   const [range,setRange]       = useState('30d');
   const [editing,setEditing]   = useState(null);
@@ -1603,6 +1719,9 @@ function App() {
   const todayM   = todayEs.find(e=>e.type==='stimmung')?.data.mood;
   const todayWtr = todayEs.filter(e=>e.type==='ernaehrung').reduce((s,e)=>s+(e.data.water||0),0);
   const todaySl  = todayEs.find(e=>e.type==='schlaf')?.data.hours;
+  const todayKcal = todayEs.filter(e=>e.type==='ernaehrung').reduce((s,e)=>s+(e.data.calories||0),0);
+  const todayHerz = todayEs.filter(e=>e.type==='herz').at(-1)?.data.bpm;
+  const todayBP   = todayEs.filter(e=>e.type==='blutdruck').at(-1)?.data;
 
   // Streak
   const streak = useMemo(()=>{
@@ -1627,7 +1746,10 @@ function App() {
   const wtE  = useMemo(()=>{ const m={}; filtered('ernaehrung').forEach(e=>{m[e.date]=(m[e.date]||0)+(e.data.water||0);}); return Object.entries(m).map(([d,v])=>({date:d,ml:v})); },[filtered]);
   const slE  = useMemo(()=>filtered('schlaf'),[filtered]);
   const scE  = useMemo(()=>{ const m={}; filtered('schritte').forEach(e=>{m[e.date]=(m[e.date]||0)+(e.data.steps||0);}); return Object.entries(m).map(([d,v])=>({date:d,steps:v})); },[filtered]);
-  const calE = useMemo(()=>{ const m={}; filtered('ernaehrung').forEach(e=>{if(e.data.calories)m[e.date]=(m[e.date]||0)+(e.data.calories||0);}); return Object.entries(m).sort().map(([d,kcal])=>({date:d,kcal})); },[filtered]);
+  const calE  = useMemo(()=>{ const m={}; filtered('ernaehrung').forEach(e=>{if(e.data.calories)m[e.date]=(m[e.date]||0)+(e.data.calories||0);}); return Object.entries(m).sort().map(([d,kcal])=>({date:d,kcal})); },[filtered]);
+  const herzE = useMemo(()=>filtered('herz'),[filtered]);
+  const bpE   = useMemo(()=>filtered('blutdruck'),[filtered]);
+  const massE = useMemo(()=>filtered('koerpermass'),[filtered]);
 
   const exportXLSX = () => {
     const wb=XLSX.utils.book_new();
@@ -1648,12 +1770,17 @@ function App() {
   // ── Dashboard ──────────────────────────────────────────────────────────────
   function Dashboard() {
     const stats = [
-      {label:'Gewicht', val:todayW,       unit:todayW?`BMI ${calcBMI(todayW,settings.height)}`:'kg',  clr:C.accent},
-      {label:'Aktivität',val:todayS||null, unit:'min',                                                 clr:C.sport},
-      {label:'Stimmung', val:todayM,       unit:todayM?'/10':'',                                       clr:C.mood},
-      {label:'Wasser',   val:todayWtr||null,unit:'ml',                                                 clr:C.water},
-      {label:'Schlaf',   val:todaySl,      unit:todaySl?'Std':'',                                      clr:C.sleep},
+      {label:'Gewicht',  val:todayW,       unit:todayW?`BMI ${calcBMI(todayW,settings.height)}`:'kg', clr:C.accent},
+      {label:'Aktivität',val:todayS||null, unit:'min',                                                clr:C.sport},
+      {label:'Stimmung', val:todayM,       unit:todayM?'/10':'',                                      clr:C.mood},
+      {label:'Schlaf',   val:todaySl,      unit:todaySl?'Std':'',                                     clr:C.sleep},
+      {label:'Herzfrq.', val:todayHerz,    unit:todayHerz?'bpm':'',                                   clr:C.heart},
+      {label:'Blutdruck',val:todayBP?`${todayBP.sys}/${todayBP.dia}`:null,unit:todayBP?'mmHg':'',     clr:C.bp},
     ];
+    const kcalGoal = settings.kalorienZiel||2000;
+    const wtrGoal  = settings.wasserZiel||2000;
+    const kcalPct  = Math.min(100,Math.round((todayKcal/kcalGoal)*100));
+    const wtrPct   = Math.min(100,Math.round((todayWtr/wtrGoal)*100));
     return <>
       <div style={{marginBottom:24}}>
         <div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Heute</div>
@@ -1664,12 +1791,30 @@ function App() {
         </div>
       </div>
 
+      {/* ── Fortschrittsbalken ── */}
+      <div style={ST.grid2}>
+        {[{label:'Kalorien',val:todayKcal,goal:kcalGoal,unit:'kcal',pct:kcalPct,clr:C.accent},
+          {label:'Wasser',  val:todayWtr, goal:wtrGoal, unit:'ml',  pct:wtrPct, clr:C.water}
+        ].map(p=>(
+          <div key={p.label} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:14}}>
+            <Bar color={p.clr}/>
+            <div style={{fontSize:9,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:4}}>{p.label}</div>
+            <div style={{fontSize:16,fontWeight:600,color:p.val>0?p.clr:C.faint,lineHeight:1.2}}>{p.val>0?p.val.toLocaleString('de-DE'):'—'}</div>
+            <div style={{fontSize:10,color:C.muted,marginBottom:6}}>/ {p.goal.toLocaleString('de-DE')} {p.unit}</div>
+            <div style={{height:4,background:C.border,borderRadius:2}}>
+              <div style={{width:p.pct+'%',height:'100%',background:p.clr,borderRadius:2,transition:'width .3s',maxWidth:'100%'}}/>
+            </div>
+            <div style={{fontSize:10,color:p.pct>=100?C.success:C.muted,marginTop:3,textAlign:'right'}}>{p.pct}%</div>
+          </div>
+        ))}
+      </div>
+
       <div style={{...ST.grid2, gridTemplateColumns:'1fr 1fr 1fr'}}>
         {stats.slice(0,3).map(s=>(
           <div key={s.label} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:14}}>
             <Bar color={s.clr}/>
             <div style={{fontSize:9,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5}}>{s.label}</div>
-            <div style={{fontSize:22,fontWeight:600,color:s.val!=null?s.clr:C.faint,lineHeight:1}}>{s.val??'—'}</div>
+            <div style={{fontSize:s.val!=null&&String(s.val).length>4?16:22,fontWeight:600,color:s.val!=null?s.clr:C.faint,lineHeight:1}}>{s.val??'—'}</div>
             <div style={{fontSize:10,color:C.muted,marginTop:3}}>{s.unit}</div>
           </div>
         ))}
@@ -1679,7 +1824,7 @@ function App() {
           <div key={s.label} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:14}}>
             <Bar color={s.clr}/>
             <div style={{fontSize:9,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5}}>{s.label}</div>
-            <div style={{fontSize:22,fontWeight:600,color:s.val!=null?s.clr:C.faint,lineHeight:1}}>{s.val??'—'}</div>
+            <div style={{fontSize:s.val!=null&&String(s.val).length>4?16:22,fontWeight:600,color:s.val!=null?s.clr:C.faint,lineHeight:1}}>{s.val??'—'}</div>
             <div style={{fontSize:10,color:C.muted,marginTop:3}}>{s.unit}</div>
           </div>
         ))}
@@ -1746,6 +1891,9 @@ function App() {
             {activeForm==='ernaehrung' && <ErnaehrungForm add={add}/>}
             {activeForm==='schlaf'     && <SchlafForm     add={add}/>}
             {activeForm==='schritte'   && <SchrittForm    add={add}/>}
+            {activeForm==='herz'        && <HerzForm       add={add}/>}
+            {activeForm==='blutdruck'   && <BlutdruckForm  add={add}/>}
+            {activeForm==='koerpermass' && <KoerpermassForm add={add}/>}
           </div>
         : <div style={{...ST.card,padding:28,textAlign:'center',color:C.muted,fontSize:13}}>Kategorie oben auswählen</div>}
 
@@ -1761,6 +1909,19 @@ function App() {
           onBlur={()=>setSettings(s=>({...s,height:+heightVal||175}))}
         />
         <div style={{fontSize:11,color:C.muted,marginTop:-8}}>Wird für BMI-Berechnung verwendet</div>
+      </div>
+
+      <div style={{...ST.card,marginTop:4}}>
+        <div style={{fontSize:11,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:12}}>Tagesziele</div>
+        <label style={ST.lbl}>Kalorienziel (kcal/Tag)</label>
+        <input style={ST.inp} type="number" inputMode="numeric"
+          value={settings.kalorienZiel||2000}
+          onChange={e=>setSettings(s=>({...s,kalorienZiel:+e.target.value||2000}))}/>
+        <label style={ST.lbl}>Wasserziel (ml/Tag)</label>
+        <input style={ST.inp} type="number" inputMode="numeric"
+          value={settings.wasserZiel||2000}
+          onChange={e=>setSettings(s=>({...s,wasserZiel:+e.target.value||2000}))}/>
+        <div style={{fontSize:11,color:C.muted,marginTop:-8}}>Werden im Dashboard als Fortschrittsbalken angezeigt</div>
       </div>
     </>;
   }
@@ -1839,6 +2000,45 @@ function App() {
           datasets={[{label:'Kalorien (kcal)',data:calE.map(e=>e.kcal),color:C.accent}]} />
         <div style={{marginTop:8,fontSize:11,color:C.muted}}>Nur aus gescannten / eingetragenen Produkten</div>
       </ChartCard>
+
+      <ChartCard title="Herzfrequenz (bpm)" color={C.heart} empty={!herzE.length}
+        stat={herzE.length?`Ø ${Math.round(herzE.reduce((s,e)=>s+e.data.bpm,0)/herzE.length)} bpm`:null}>
+        <CJSChart type="line" height={170} yMin={40}
+          labels={herzE.map(e=>fmtD(e.date))}
+          datasets={[{label:'Herzfrequenz (bpm)',data:herzE.map(e=>e.data.bpm),color:C.heart,fill:false}]} />
+        <div style={{marginTop:8,fontSize:11,color:C.muted}}>Normalbereich: 60–100 bpm in Ruhe</div>
+      </ChartCard>
+
+      <ChartCard title="Blutdruck (mmHg)" color={C.bp} empty={!bpE.length}
+        stat={bpE.length?`${Math.round(bpE.reduce((s,e)=>s+e.data.sys,0)/bpE.length)}/${Math.round(bpE.reduce((s,e)=>s+e.data.dia,0)/bpE.length)} Ø`:null}>
+        <CJSChart type="line" height={170} yMin={50}
+          labels={bpE.map(e=>fmtD(e.date))}
+          datasets={[
+            {label:'Systolisch',data:bpE.map(e=>e.data.sys),color:C.bp},
+            {label:'Diastolisch',data:bpE.map(e=>e.data.dia),color:C.heart,dashed:true},
+          ]} />
+        <div style={{display:'flex',gap:14,marginTop:10,fontSize:11}}>
+          <span style={{color:C.bp}}>— Systolisch</span>
+          <span style={{color:C.heart}}>- - Diastolisch</span>
+        </div>
+        <div style={{marginTop:6,fontSize:11,color:C.muted}}>Optimal: &lt;120/80 mmHg</div>
+      </ChartCard>
+
+      {massE.length>0&&<ChartCard title="Körpermaße (cm)" color={C.mass} empty={false}
+        stat={massE.at(-1)?.data.whr?`WHR ${massE.at(-1).data.whr}`:null}>
+        <CJSChart type="line" height={170}
+          labels={massE.map(e=>fmtD(e.date))}
+          datasets={[
+            ...(massE.some(e=>e.data.taille)?[{label:'Taille',data:massE.map(e=>e.data.taille),color:C.mass}]:[]),
+            ...(massE.some(e=>e.data.hufte) ?[{label:'Hüfte', data:massE.map(e=>e.data.hufte), color:C.accent,dashed:true}]:[]),
+            ...(massE.some(e=>e.data.arm)   ?[{label:'Arm',   data:massE.map(e=>e.data.arm),   color:C.muted}]:[]),
+          ]} />
+        <div style={{display:'flex',gap:14,marginTop:10,fontSize:11,flexWrap:'wrap'}}>
+          <span style={{color:C.mass}}>— Taille</span>
+          <span style={{color:C.accent}}>- - Hüfte</span>
+          <span style={{color:C.muted}}>— Arm</span>
+        </div>
+      </ChartCard>}
     </>;
   }
 
@@ -1899,7 +2099,7 @@ function App() {
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>{entries.length} Einträge · lokal gespeichert</span>
-          <span style={{color:C.faint}}>v3.0</span>
+          <span style={{color:C.faint}}>v3.1</span>
         </div>
       </header>
 
@@ -1928,7 +2128,10 @@ function App() {
             {editing.type==='stimmung'   && <StimmungForm   add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
             {editing.type==='ernaehrung' && <ErnaehrungForm add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
             {editing.type==='schlaf'     && <SchlafForm     add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
-            {editing.type==='schritte'   && <SchrittForm    add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
+            {editing.type==='schritte'   && <SchrittForm    add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/> }
+            {editing.type==='herz'        && <HerzForm       add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
+            {editing.type==='blutdruck'   && <BlutdruckForm  add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
+            {editing.type==='koerpermass' && <KoerpermassForm add={add}                    initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/> }
           </div>
         </div>
       )}
@@ -1950,7 +2153,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 
 <script>
   if('serviceWorker' in navigator){
-    window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+    window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
   }
 </script>
 </body>
