@@ -1915,14 +1915,189 @@ function HealthImport({ onImport, settings }) {
   );
 }
 
+
+// ── Kalorienziel-Rechner (Mifflin-St Jeor) ───────────────────────────────────
+function KalorienRechner({ settings, onSave, lastWeight }) {
+  const [step, setStep] = useState(0); // 0=Basis 1=Aktivität 2=Ziel 3=Ergebnis
+  const [sex,  setSex]  = useState('m');
+  const [age,  setAge]  = useState('');
+  const [kg,   setKg]   = useState(lastWeight ? String(Math.round(lastWeight)) : '');
+  const [cm,   setCm]   = useState(String(settings.height||175));
+  const [act,  setAct]  = useState(1.55);
+  const [goal, setGoal] = useState(0);
+  const [result,setRes] = useState(null);
+
+  const ACT_LEVELS = [
+    { val:1.2,   label:'Kaum aktiv',       sub:'Bürojob, kein Sport' },
+    { val:1.375, label:'Leicht aktiv',      sub:'1–3× Sport / Woche' },
+    { val:1.55,  label:'Mäßig aktiv',       sub:'3–5× Sport / Woche' },
+    { val:1.725, label:'Sehr aktiv',        sub:'6–7× Sport / Woche' },
+    { val:1.9,   label:'Extrem aktiv',      sub:'Leistungssport / Schwerstarbeit' },
+  ];
+  const GOALS = [
+    { val:-700, label:'Stark abnehmen',    sub:'~700 kcal Defizit / Tag' },
+    { val:-400, label:'Moderat abnehmen',  sub:'~400 kcal Defizit / Tag' },
+    { val:0,    label:'Gewicht halten',    sub:'Kalorienbedarf exakt' },
+    { val:250,  label:'Muskeln aufbauen',  sub:'~250 kcal Überschuss / Tag' },
+  ];
+
+  const calc = () => {
+    const w=+kg, h=+cm, a=+age;
+    if(!w||!h||!a) return null;
+    const bmr = sex==='m'
+      ? 10*w + 6.25*h - 5*a + 5
+      : 10*w + 6.25*h - 5*a - 161;
+    return Math.round(bmr * act + goal);
+  };
+
+  const canNext = [
+    age && kg && cm,
+    true,
+    true,
+    true,
+  ][step];
+
+  const next = () => {
+    if(step===2){ setRes(calc()); setStep(3); }
+    else setStep(s=>s+1);
+  };
+
+  const confirm = () => {
+    if(result) onSave(result);
+  };
+
+  const STEP_LABELS = ['Körper', 'Aktivität', 'Ziel', 'Ergebnis'];
+
+  return (
+    <div>
+      {/* Fortschritts-Tabs */}
+      <div style={{display:'flex',gap:4,marginBottom:16}}>
+        {STEP_LABELS.map((l,i)=>(
+          <div key={i} style={{flex:1,textAlign:'center',padding:'4px 0',
+            fontSize:10,borderRadius:4,letterSpacing:0.4,
+            background:i===step?`${C.accent}20`:i<step?`${C.success}14`:'transparent',
+            color:i===step?C.accent:i<step?C.success:C.faint,
+            border:`1px solid ${i===step?C.accent:i<step?C.success:C.border}`}}>
+            {i<step?'✓ ':''}{l}
+          </div>
+        ))}
+      </div>
+
+      {/* Schritt 0: Körperdaten */}
+      {step===0&&<>
+        <label style={ST.lbl}>Geschlecht</label>
+        <div style={{display:'flex',gap:8,marginBottom:14}}>
+          {[['m','Männlich'],['f','Weiblich']].map(([v,l])=>(
+            <button key={v} onClick={()=>setSex(v)}
+              style={{flex:1,padding:'10px',borderRadius:8,fontSize:13,fontWeight:sex===v?600:400,
+                border:`1px solid ${sex===v?C.accent:C.border}`,
+                background:sex===v?`${C.accent}18`:'transparent',
+                color:sex===v?C.accent:C.muted,cursor:'pointer'}}>{l}</button>
+          ))}
+        </div>
+        <label style={ST.lbl}>Alter (Jahre)</label>
+        <input style={ST.inp} type="number" inputMode="numeric" placeholder="25"
+          value={age} onChange={e=>setAge(e.target.value)}/>
+        <label style={ST.lbl}>Gewicht (kg)</label>
+        <input style={ST.inp} type="number" inputMode="decimal" placeholder="75"
+          value={kg} onChange={e=>setKg(e.target.value)}/>
+        <label style={ST.lbl}>Körpergröße (cm)</label>
+        <input style={ST.inp} type="number" inputMode="numeric" placeholder="175"
+          value={cm} onChange={e=>setCm(e.target.value)}/>
+      </>}
+
+      {/* Schritt 1: Aktivitätslevel */}
+      {step===1&&<>
+        <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.6}}>
+          Wie aktiv bist du im Alltag — Sport und Beruf zusammen?
+        </div>
+        {ACT_LEVELS.map(a=>(
+          <button key={a.val} onClick={()=>setAct(a.val)}
+            style={{width:'100%',textAlign:'left',padding:'12px 14px',marginBottom:6,
+              borderRadius:10,cursor:'pointer',display:'block',
+              border:`1px solid ${act===a.val?C.accent:C.border}`,
+              background:act===a.val?`${C.accent}14`:'transparent'}}>
+            <div style={{fontSize:13,fontWeight:act===a.val?600:400,
+              color:act===a.val?C.accent:C.text}}>{a.label}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:2}}>{a.sub}</div>
+          </button>
+        ))}
+      </>}
+
+      {/* Schritt 2: Ziel */}
+      {step===2&&<>
+        <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.6}}>
+          Was ist dein aktuelles Ziel?
+        </div>
+        {GOALS.map(g=>(
+          <button key={g.val} onClick={()=>setGoal(g.val)}
+            style={{width:'100%',textAlign:'left',padding:'12px 14px',marginBottom:6,
+              borderRadius:10,cursor:'pointer',display:'block',
+              border:`1px solid ${goal===g.val?C.accent:C.border}`,
+              background:goal===g.val?`${C.accent}14`:'transparent'}}>
+            <div style={{fontSize:13,fontWeight:goal===g.val?600:400,
+              color:goal===g.val?C.accent:C.text}}>{g.label}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:2}}>{g.sub}</div>
+          </button>
+        ))}
+      </>}
+
+      {/* Schritt 3: Ergebnis */}
+      {step===3&&result&&<>
+        <div style={{textAlign:'center',padding:'16px 0 8px'}}>
+          <div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>
+            Dein täglicher Kalorienbedarf
+          </div>
+          <div style={{fontSize:52,fontWeight:700,color:C.accent,lineHeight:1}}>{result.toLocaleString('de-DE')}</div>
+          <div style={{fontSize:14,color:C.muted,marginTop:4}}>kcal / Tag</div>
+        </div>
+        <div style={{...ST.card,background:C.cardAlt,marginBottom:14}}>
+          {[
+            ['Grundumsatz (BMR)', Math.round((sex==='m'?10*+kg+6.25*+cm-5*+age+5:10*+kg+6.25*+cm-5*+age-161))],
+            ['× Aktivitätsfaktor', act],
+            [goal>0?'+ Aufbau-Surplus':goal<0?'- Defizit':'± Erhaltung', goal===0?'—':(goal>0?'+':'')+goal+' kcal'],
+          ].map(([l,v])=>(
+            <div key={l} style={{display:'flex',justifyContent:'space-between',
+              padding:'6px 0',borderBottom:`1px solid ${C.border}44`,fontSize:12}}>
+              <span style={{color:C.muted}}>{l}</span>
+              <span style={{color:C.text,fontWeight:500}}>{v}</span>
+            </div>
+          ))}
+        </div>
+        <button style={{...ST.btn(C.accent),marginBottom:8}} onClick={confirm}>
+          {result.toLocaleString('de-DE')} kcal als Ziel übernehmen
+        </button>
+        <button style={ST.outbtn(C.muted)} onClick={()=>setStep(0)}>
+          Neu berechnen
+        </button>
+      </>}
+
+      {/* Navigation */}
+      {step<3&&(
+        <button style={{...ST.btn(canNext?C.accent:C.border),marginTop:4,
+          opacity:canNext?1:0.5,cursor:canNext?'pointer':'default'}}
+          onClick={()=>canNext&&next()}>
+          {step===2?'Berechnen →':'Weiter →'}
+        </button>
+      )}
+      {step>0&&step<3&&(
+        <button style={{...ST.outbtn(C.muted),marginTop:8}} onClick={()=>setStep(s=>s-1)}>
+          ← Zurück
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 function App() {
   const [tab,setTab]           = useState('dashboard');
   const [entries,setEntries]   = useState(()=>store.get('entries')||[]);
-  const [settings,setSettings] = useState(()=>store.get('settings')||{height:175,kalorienZiel:2000,wasserZiel:2000});
+  const [settings,setSettings] = useState(()=>store.get('settings')||{height:175,kalorienZiel:2000,wasserZiel:2000,chartOrder:null});
   const [activeForm,setAF]     = useState(null);
   const [range,setRange]       = useState('30d');
   const [editing,setEditing]   = useState(null);
+  const [showKcalCalc,setShowKcalCalc] = useState(false);
 
   useEffect(()=>{ store.set('entries',entries); },[entries]);
   useEffect(()=>{ store.set('settings',settings); },[settings]);
@@ -2151,10 +2326,28 @@ function App() {
 
       <div style={{...ST.card,marginTop:4}}>
         <div style={{fontSize:11,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:12}}>Tagesziele</div>
-        <label style={ST.lbl}>Kalorienziel (kcal/Tag)</label>
-        <input style={ST.inp} type="number" inputMode="numeric"
-          value={settings.kalorienZiel||2000}
-          onChange={e=>setSettings(s=>({...s,kalorienZiel:+e.target.value||2000}))}/>
+
+        {/* Kalorienziel */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+          <label style={{...ST.lbl,marginBottom:0}}>Kalorienziel (kcal/Tag)</label>
+          <button onClick={()=>setShowKcalCalc(s=>!s)}
+            style={{fontSize:11,padding:'3px 10px',borderRadius:6,
+              border:`1px solid ${C.accent}44`,background:`${C.accent}14`,
+              color:C.accent,cursor:'pointer'}}>
+            {showKcalCalc?'Schließen':'Berechnen'}
+          </button>
+        </div>
+        {showKcalCalc
+          ? <KalorienRechner
+              settings={settings}
+              lastWeight={entries.filter(e=>e.type==='gewicht').at(-1)?.data.weight}
+              onSave={v=>{setSettings(s=>({...s,kalorienZiel:v}));setShowKcalCalc(false);}}/>
+          : <input style={ST.inp} type="number" inputMode="numeric"
+              value={settings.kalorienZiel||2000}
+              onChange={e=>setSettings(s=>({...s,kalorienZiel:+e.target.value||2000}))}/>
+        }
+
+        {/* Wasserziel */}
         <label style={ST.lbl}>Wasserziel (ml/Tag)</label>
         <input style={ST.inp} type="number" inputMode="numeric"
           value={settings.wasserZiel||2000}
@@ -2171,112 +2364,200 @@ function App() {
     const mAvg  = avg(stE.map(e=>e.data.mood));
     const wlAvg = avg(wtE.map(e=>e.ml));
     const slAvg = avg(slE.map(e=>e.data.hours));
-    const scAvg  = scE.length ? Math.round(scE.reduce((a,e)=>a+e.steps,0)/scE.length) : null;
-    const calAvg = calE.length ? Math.round(calE.reduce((a,e)=>a+e.kcal,0)/calE.length) : null;
+    const scAvg = scE.length?Math.round(scE.reduce((a,e)=>a+e.steps,0)/scE.length):null;
+    const calAvg= calE.length?Math.round(calE.reduce((a,e)=>a+e.kcal,0)/calE.length):null;
+
+    // ── Diagramm-Definitionen ────────────────────────────────────────────────
+    const CHART_DEFS = [
+      { id:'gewicht',   title:'Gewichtsverlauf (kg)',        color:C.accent,  hasData:!!gwE.length },
+      { id:'sport',     title:'Sportaktivität (Minuten)',    color:C.sport,   hasData:!!spE.length },
+      { id:'stimmung',  title:'Stimmung, Energie & Stress',  color:C.mood,    hasData:!!stE.length },
+      { id:'wasser',    title:'Wasseraufnahme (ml / Tag)',   color:C.water,   hasData:!!wtE.length },
+      { id:'schlaf',    title:'Schlafdauer (Stunden)',       color:C.sleep,   hasData:!!slE.length },
+      { id:'schritte',  title:'Schritte pro Tag',            color:C.steps,   hasData:!!scE.length },
+      { id:'kalorien',  title:'Kalorien (kcal)',             color:C.accent,  hasData:!!calE.length },
+      { id:'herz',      title:'Herzfrequenz (bpm)',          color:C.heart,   hasData:!!herzE.length },
+      { id:'blutdruck', title:'Blutdruck (mmHg)',            color:C.bp,      hasData:!!bpE.length },
+      { id:'koerper',   title:'Körpermaße (cm)',             color:C.mass,    hasData:!!massE.length },
+    ];
+
+    const DEFAULT_ORDER = CHART_DEFS.map(d=>d.id);
+    const [order, setOrderLocal] = useState(()=>settings.chartOrder||DEFAULT_ORDER);
+    const [editMode, setEditMode] = useState(false);
+
+    const moveChart = (idx, dir) => {
+      const newOrder = [...order];
+      const swap = idx + dir;
+      if(swap<0||swap>=newOrder.length) return;
+      [newOrder[idx],newOrder[swap]] = [newOrder[swap],newOrder[idx]];
+      setOrderLocal(newOrder);
+      setSettings(s=>({...s,chartOrder:newOrder}));
+    };
+
+    // ── Einzelne Chart-Renderer ───────────────────────────────────────────────
+    const renderChart = (id) => {
+      switch(id) {
+        case 'gewicht': return (
+          <ChartCard key="gewicht" title="Gewichtsverlauf (kg)" color={C.accent} empty={!gwE.length} stat={wAvg?`Ø ${wAvg} kg`:null}>
+            <CJSChart type="line" height={170} labels={gwE.map(e=>fmtD(e.date))}
+              datasets={[{label:'Gewicht (kg)',data:gwE.map(e=>e.data.weight),color:C.accent,fill:true}]}/>
+          </ChartCard>
+        );
+        case 'sport': return (
+          <ChartCard key="sport" title="Sportaktivität (Minuten)" color={C.sport} empty={!spE.length} stat={sSum?`${sSum} min`:null}>
+            <CJSChart type="bar" height={170} labels={spE.map(e=>fmtD(e.date))}
+              datasets={[{label:'Dauer (min)',data:spE.map(e=>e.min),color:C.sport}]}/>
+          </ChartCard>
+        );
+        case 'stimmung': return (
+          <ChartCard key="stimmung" title="Stimmung, Energie & Stress" color={C.mood} empty={!stE.length} stat={mAvg?`Ø ${mAvg}/10`:null}>
+            <CJSChart type="line" height={170} yMin={1} yMax={10} yTicks={[1,5,10]}
+              labels={stE.map(e=>fmtD(e.date))}
+              datasets={[
+                {label:'Stimmung',data:stE.map(e=>e.data.mood),color:C.mood},
+                {label:'Energie', data:stE.map(e=>e.data.energy),color:C.sport},
+                {label:'Stress',  data:stE.map(e=>e.data.stress),color:C.danger,dashed:true},
+              ]}/>
+            <div style={{display:'flex',gap:14,marginTop:10,fontSize:11}}>
+              <span style={{color:C.mood}}>— Stimmung</span>
+              <span style={{color:C.sport}}>— Energie</span>
+              <span style={{color:C.danger}}>- - Stress</span>
+            </div>
+          </ChartCard>
+        );
+        case 'wasser': return (
+          <ChartCard key="wasser" title="Wasseraufnahme (ml / Tag)" color={C.water} empty={!wtE.length} stat={wlAvg?`Ø ${wlAvg} ml`:null}>
+            <CJSChart type="bar" height={170} labels={wtE.map(e=>fmtD(e.date))}
+              datasets={[{label:'Wasser (ml)',data:wtE.map(e=>e.ml),color:C.water}]}/>
+            <div style={{marginTop:8,fontSize:11,color:C.muted}}>Empfehlung: mind. 2.000 ml / Tag</div>
+          </ChartCard>
+        );
+        case 'schlaf': return (
+          <ChartCard key="schlaf" title="Schlafdauer (Stunden)" color={C.sleep} empty={!slE.length} stat={slAvg?`Ø ${slAvg} Std`:null}>
+            <CJSChart type="bar" height={170} yMin={0} yMax={12}
+              labels={slE.map(e=>fmtD(e.date))}
+              datasets={[{label:'Schlaf (Std)',data:slE.map(e=>e.data.hours),color:C.sleep}]}/>
+            <div style={{marginTop:8,fontSize:11,color:C.muted}}>Empfehlung: 7–9 Stunden / Nacht</div>
+          </ChartCard>
+        );
+        case 'schritte': return (
+          <ChartCard key="schritte" title="Schritte pro Tag" color={C.steps} empty={!scE.length} stat={scAvg?`Ø ${scAvg.toLocaleString('de-DE')}`:null}>
+            <CJSChart type="bar" height={170} labels={scE.map(e=>fmtD(e.date))}
+              datasets={[{label:'Schritte',data:scE.map(e=>e.steps),color:C.steps}]}/>
+            <div style={{marginTop:8,fontSize:11,color:C.muted}}>Empfehlung: 8.000–10.000 Schritte / Tag</div>
+          </ChartCard>
+        );
+        case 'kalorien': return (
+          <ChartCard key="kalorien" title="Kalorien aus Lebensmitteln (kcal)" color={C.accent} empty={!calE.length}
+            stat={calAvg?`Ø ${calAvg} kcal`:null}>
+            <CJSChart type="bar" height={170} labels={calE.map(e=>fmtD(e.date))}
+              datasets={[{label:'Kalorien (kcal)',data:calE.map(e=>e.kcal),color:C.accent}]}/>
+            <div style={{marginTop:8,fontSize:11,color:C.muted}}>Nur aus gescannten / eingetragenen Produkten</div>
+          </ChartCard>
+        );
+        case 'herz': return (
+          <ChartCard key="herz" title="Herzfrequenz (bpm)" color={C.heart} empty={!herzE.length}
+            stat={herzE.length?`Ø ${Math.round(herzE.reduce((s,e)=>s+e.data.bpm,0)/herzE.length)} bpm`:null}>
+            <CJSChart type="line" height={170} yMin={40}
+              labels={herzE.map(e=>fmtD(e.date))}
+              datasets={[{label:'Herzfrequenz (bpm)',data:herzE.map(e=>e.data.bpm),color:C.heart,fill:false}]}/>
+            <div style={{marginTop:8,fontSize:11,color:C.muted}}>Normalbereich: 60–100 bpm in Ruhe</div>
+          </ChartCard>
+        );
+        case 'blutdruck': return (
+          <ChartCard key="blutdruck" title="Blutdruck (mmHg)" color={C.bp} empty={!bpE.length}
+            stat={bpE.length?`${Math.round(bpE.reduce((s,e)=>s+e.data.sys,0)/bpE.length)}/${Math.round(bpE.reduce((s,e)=>s+e.data.dia,0)/bpE.length)} Ø`:null}>
+            <CJSChart type="line" height={170} yMin={50}
+              labels={bpE.map(e=>fmtD(e.date))}
+              datasets={[
+                {label:'Systolisch', data:bpE.map(e=>e.data.sys),color:C.bp},
+                {label:'Diastolisch',data:bpE.map(e=>e.data.dia),color:C.heart,dashed:true},
+              ]}/>
+            <div style={{display:'flex',gap:14,marginTop:10,fontSize:11}}>
+              <span style={{color:C.bp}}>— Systolisch</span>
+              <span style={{color:C.heart}}>- - Diastolisch</span>
+            </div>
+            <div style={{marginTop:6,fontSize:11,color:C.muted}}>Optimal: &lt;120/80 mmHg</div>
+          </ChartCard>
+        );
+        case 'koerper': return massE.length>0 ? (
+          <ChartCard key="koerper" title="Körpermaße (cm)" color={C.mass} empty={false}
+            stat={massE.at(-1)?.data.whr?`WHR ${massE.at(-1).data.whr}`:null}>
+            <CJSChart type="line" height={170}
+              labels={massE.map(e=>fmtD(e.date))}
+              datasets={[
+                ...(massE.some(e=>e.data.taille)?[{label:'Taille',data:massE.map(e=>e.data.taille),color:C.mass}]:[]),
+                ...(massE.some(e=>e.data.hufte) ?[{label:'Hüfte', data:massE.map(e=>e.data.hufte), color:C.accent,dashed:true}]:[]),
+                ...(massE.some(e=>e.data.arm)   ?[{label:'Arm',   data:massE.map(e=>e.data.arm),   color:C.muted}]:[]),
+              ]}/>
+            <div style={{display:'flex',gap:14,marginTop:10,fontSize:11,flexWrap:'wrap'}}>
+              <span style={{color:C.mass}}>— Taille</span>
+              <span style={{color:C.accent}}>- - Hüfte</span>
+              <span style={{color:C.muted}}>— Arm</span>
+            </div>
+          </ChartCard>
+        ) : null;
+        default: return null;
+      }
+    };
 
     return <>
-      <div style={{display:'flex',gap:6,marginBottom:22,flexWrap:'wrap'}}>
+      {/* Zeitraum-Filter + Reihenfolge-Button */}
+      <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
         {['7d','30d','3m','1y','all'].map(r=>(
           <button key={r} style={ST.rng(range===r)} onClick={()=>setRange(r)}>
             {r==='7d'?'7 Tage':r==='30d'?'30 Tage':r==='3m'?'3 Mon.':r==='1y'?'1 Jahr':'Alles'}
           </button>
         ))}
+        <button onClick={()=>setEditMode(e=>!e)}
+          style={{marginLeft:'auto',padding:'5px 12px',borderRadius:6,fontSize:11,
+            border:`1px solid ${editMode?C.accent:C.border}`,
+            background:editMode?`${C.accent}14`:'transparent',
+            color:editMode?C.accent:C.muted,cursor:'pointer',flexShrink:0}}>
+          {editMode?'✓ Fertig':'⇅ Sortieren'}
+        </button>
       </div>
 
-      <ChartCard title="Gewichtsverlauf (kg)" color={C.accent} empty={!gwE.length} stat={wAvg?`Ø ${wAvg} kg`:null}>
-        <CJSChart type="line" height={170}
-          labels={gwE.map(e=>fmtD(e.date))}
-          datasets={[{label:'Gewicht (kg)',data:gwE.map(e=>e.data.weight),color:C.accent,fill:true}]} />
-      </ChartCard>
-
-      <ChartCard title="Sportaktivität (Minuten)" color={C.sport} empty={!spE.length} stat={sSum?`${sSum} min`:null}>
-        <CJSChart type="bar" height={170}
-          labels={spE.map(e=>fmtD(e.date))}
-          datasets={[{label:'Dauer (min)',data:spE.map(e=>e.min),color:C.sport}]} />
-      </ChartCard>
-
-      <ChartCard title="Stimmung, Energie & Stress" color={C.mood} empty={!stE.length} stat={mAvg?`Ø ${mAvg}/10`:null}>
-        <CJSChart type="line" height={170} yMin={1} yMax={10} yTicks={[1,5,10]}
-          labels={stE.map(e=>fmtD(e.date))}
-          datasets={[
-            {label:'Stimmung',data:stE.map(e=>e.data.mood),   color:C.mood},
-            {label:'Energie', data:stE.map(e=>e.data.energy), color:C.sport},
-            {label:'Stress',  data:stE.map(e=>e.data.stress), color:C.danger,dashed:true},
-          ]} />
-        <div style={{display:'flex',gap:14,marginTop:10,fontSize:11}}>
-          <span style={{color:C.mood}}>— Stimmung</span>
-          <span style={{color:C.sport}}>— Energie</span>
-          <span style={{color:C.danger}}>- - Stress</span>
+      {/* Sortier-Modus: Liste mit ↑↓ Buttons */}
+      {editMode&&(
+        <div style={{...ST.card,marginBottom:16,padding:'8px 12px'}}>
+          <div style={{fontSize:11,color:C.muted,marginBottom:10,letterSpacing:0.6}}>
+            REIHENFOLGE — Tippe ↑↓ zum Verschieben
+          </div>
+          {order.map((id,idx)=>{
+            const def=CHART_DEFS.find(d=>d.id===id);
+            if(!def)return null;
+            return (
+              <div key={id} style={{display:'flex',alignItems:'center',gap:8,
+                padding:'7px 0',borderBottom:`1px solid ${C.border}44`}}>
+                <div style={{width:3,height:12,background:def.color,borderRadius:1,flexShrink:0}}/>
+                <div style={{flex:1,fontSize:12,color:def.hasData?C.text:C.muted}}>{def.title}</div>
+                <div style={{display:'flex',gap:2,flexShrink:0}}>
+                  <button onClick={()=>moveChart(idx,-1)} disabled={idx===0}
+                    style={{background:'none',border:`1px solid ${C.border}`,borderRadius:4,
+                      color:idx===0?C.faint:C.muted,fontSize:13,width:26,height:26,cursor:idx===0?'default':'pointer',
+                      display:'flex',alignItems:'center',justifyContent:'center'}}>↑</button>
+                  <button onClick={()=>moveChart(idx,1)} disabled={idx===order.length-1}
+                    style={{background:'none',border:`1px solid ${C.border}`,borderRadius:4,
+                      color:idx===order.length-1?C.faint:C.muted,fontSize:13,width:26,height:26,
+                      cursor:idx===order.length-1?'default':'pointer',
+                      display:'flex',alignItems:'center',justifyContent:'center'}}>↓</button>
+                </div>
+              </div>
+            );
+          })}
+          <button onClick={()=>{
+            const def=CHART_DEFS.map(d=>d.id);
+            setOrderLocal(def);
+            setSettings(s=>({...s,chartOrder:def}));
+          }} style={{...ST.outbtn(C.muted),marginTop:10,padding:8,fontSize:11}}>
+            Reihenfolge zurücksetzen
+          </button>
         </div>
-      </ChartCard>
+      )}
 
-      <ChartCard title="Wasseraufnahme (ml / Tag)" color={C.water} empty={!wtE.length} stat={wlAvg?`Ø ${wlAvg} ml`:null}>
-        <CJSChart type="bar" height={170}
-          labels={wtE.map(e=>fmtD(e.date))}
-          datasets={[{label:'Wasser (ml)',data:wtE.map(e=>e.ml),color:C.water}]} />
-        <div style={{marginTop:8,fontSize:11,color:C.muted}}>Empfehlung: mind. 2.000 ml / Tag</div>
-      </ChartCard>
-
-      <ChartCard title="Schlafdauer (Stunden)" color={C.sleep} empty={!slE.length} stat={slAvg?`Ø ${slAvg} Std`:null}>
-        <CJSChart type="bar" height={170} yMin={0} yMax={12}
-          labels={slE.map(e=>fmtD(e.date))}
-          datasets={[{label:'Schlaf (Std)',data:slE.map(e=>e.data.hours),color:C.sleep}]} />
-        <div style={{marginTop:8,fontSize:11,color:C.muted}}>Empfehlung: 7–9 Stunden / Nacht</div>
-      </ChartCard>
-
-      <ChartCard title="Schritte pro Tag" color={C.steps} empty={!scE.length} stat={scAvg?`Ø ${scAvg.toLocaleString('de-DE')}`:null}>
-        <CJSChart type="bar" height={170}
-          labels={scE.map(e=>fmtD(e.date))}
-          datasets={[{label:'Schritte',data:scE.map(e=>e.steps),color:C.steps}]} />
-        <div style={{marginTop:8,fontSize:11,color:C.muted}}>Empfehlung: 8.000–10.000 Schritte / Tag</div>
-      </ChartCard>
-
-      <ChartCard title="Kalorien aus Lebensmitteln (kcal)" color={C.accent} empty={!calE.length}
-        stat={calE.length?`Ø ${Math.round(calE.reduce((a,e)=>a+e.kcal,0)/calE.length)} kcal`:null}>
-        <CJSChart type="bar" height={170}
-          labels={calE.map(e=>fmtD(e.date))}
-          datasets={[{label:'Kalorien (kcal)',data:calE.map(e=>e.kcal),color:C.accent}]} />
-        <div style={{marginTop:8,fontSize:11,color:C.muted}}>Nur aus gescannten / eingetragenen Produkten</div>
-      </ChartCard>
-
-      <ChartCard title="Herzfrequenz (bpm)" color={C.heart} empty={!herzE.length}
-        stat={herzE.length?`Ø ${Math.round(herzE.reduce((s,e)=>s+e.data.bpm,0)/herzE.length)} bpm`:null}>
-        <CJSChart type="line" height={170} yMin={40}
-          labels={herzE.map(e=>fmtD(e.date))}
-          datasets={[{label:'Herzfrequenz (bpm)',data:herzE.map(e=>e.data.bpm),color:C.heart,fill:false}]} />
-        <div style={{marginTop:8,fontSize:11,color:C.muted}}>Normalbereich: 60–100 bpm in Ruhe</div>
-      </ChartCard>
-
-      <ChartCard title="Blutdruck (mmHg)" color={C.bp} empty={!bpE.length}
-        stat={bpE.length?`${Math.round(bpE.reduce((s,e)=>s+e.data.sys,0)/bpE.length)}/${Math.round(bpE.reduce((s,e)=>s+e.data.dia,0)/bpE.length)} Ø`:null}>
-        <CJSChart type="line" height={170} yMin={50}
-          labels={bpE.map(e=>fmtD(e.date))}
-          datasets={[
-            {label:'Systolisch',data:bpE.map(e=>e.data.sys),color:C.bp},
-            {label:'Diastolisch',data:bpE.map(e=>e.data.dia),color:C.heart,dashed:true},
-          ]} />
-        <div style={{display:'flex',gap:14,marginTop:10,fontSize:11}}>
-          <span style={{color:C.bp}}>— Systolisch</span>
-          <span style={{color:C.heart}}>- - Diastolisch</span>
-        </div>
-        <div style={{marginTop:6,fontSize:11,color:C.muted}}>Optimal: &lt;120/80 mmHg</div>
-      </ChartCard>
-
-      {massE.length>0&&<ChartCard title="Körpermaße (cm)" color={C.mass} empty={false}
-        stat={massE.at(-1)?.data.whr?`WHR ${massE.at(-1).data.whr}`:null}>
-        <CJSChart type="line" height={170}
-          labels={massE.map(e=>fmtD(e.date))}
-          datasets={[
-            ...(massE.some(e=>e.data.taille)?[{label:'Taille',data:massE.map(e=>e.data.taille),color:C.mass}]:[]),
-            ...(massE.some(e=>e.data.hufte) ?[{label:'Hüfte', data:massE.map(e=>e.data.hufte), color:C.accent,dashed:true}]:[]),
-            ...(massE.some(e=>e.data.arm)   ?[{label:'Arm',   data:massE.map(e=>e.data.arm),   color:C.muted}]:[]),
-          ]} />
-        <div style={{display:'flex',gap:14,marginTop:10,fontSize:11,flexWrap:'wrap'}}>
-          <span style={{color:C.mass}}>— Taille</span>
-          <span style={{color:C.accent}}>- - Hüfte</span>
-          <span style={{color:C.muted}}>— Arm</span>
-        </div>
-      </ChartCard>}
+      {/* Charts in gespeicherter Reihenfolge */}
+      {order.map(id=>renderChart(id))}
     </>;
   }
 
@@ -2337,7 +2618,7 @@ function App() {
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>{entries.length} Einträge · lokal gespeichert</span>
-          <span style={{color:C.faint}}>v3.1</span>
+          <span style={{color:C.faint}}>v3.2</span>
         </div>
       </header>
 
