@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>HealthLog</title>
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -3217,28 +3217,58 @@ function App() {
 
   // ── Export & Import ────────────────────────────────────────────────────────
   function ExportTab() {
-    return <>
-      <div style={ST.secttl}>Import</div>
-      <HealthImport onImport={importHealth} settings={settings} />
+    const [open, setOpen] = useState(null); // 'import' | 'export' | 'stats' | null
+    const toggle = key => setOpen(o => o===key ? null : key);
 
-      <div style={ST.secttl}>Export</div>
-      {[
-        {label:'Excel (.xlsx)',sub:`${entries.length} Einträge, je Metrik ein Sheet`,action:exportXLSX,clr:C.success},
-        {label:'PDF',sub:'Druckansicht öffnen → Als PDF speichern',action:()=>window.print(),clr:C.accent},
-        {label:'JSON Backup',sub:'Rohdaten für Backup oder Import',action:exportJSON,clr:C.water},
-      ].map(b=>(
-        <div key={b.label} style={ST.card}>
-          <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>{b.label}</div>
-          <div style={{fontSize:12,color:C.muted,marginBottom:14,lineHeight:1.6}}>{b.sub}</div>
-          <button style={ST.btn(b.clr)} onClick={b.action}>{b.label} herunterladen</button>
+    const Section = ({ id, label, sub, children }) => {
+      const isOpen = open === id;
+      return (
+        <div style={{...ST.card, padding:0, overflow:'hidden', marginBottom:8}}>
+          <button onClick={()=>toggle(id)}
+            style={{width:'100%', background:'transparent', border:'none', cursor:'pointer',
+              padding:'14px 16px', display:'flex', alignItems:'center', justifyContent:'space-between',
+              textAlign:'left', gap:12}}>
+            <div>
+              <div style={{fontSize:13, fontWeight:600, color:C.text}}>{label}</div>
+              {!isOpen && sub && <div style={{fontSize:11, color:C.faint, marginTop:2}}>{sub}</div>}
+            </div>
+            <span style={{fontSize:16, color:isOpen?C.accent:C.faint, flexShrink:0,
+              display:'inline-block', transition:'transform 0.2s',
+              transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)'}}>›</span>
+          </button>
+          {isOpen && (
+            <div style={{borderTop:`1px solid ${C.border}`, padding:'16px'}}>
+              {children}
+            </div>
+          )}
         </div>
-      ))}
+      );
+    };
 
-      <div style={ST.card}>
-        <div style={{fontSize:11,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:12}}>Statistik</div>
+    return <>
+      <Section id="import" label="Import" sub="Apple Health, Google Fit, Samsung, Fitbit, CSV …">
+        <HealthImport onImport={importHealth} settings={settings} />
+      </Section>
+
+      <Section id="export" label="Export" sub="Excel, PDF oder JSON-Backup herunterladen">
+        {[
+          {label:'Excel (.xlsx)', sub:`${entries.length} Einträge, je Metrik ein Sheet`, action:exportXLSX, clr:C.success},
+          {label:'PDF',           sub:'Druckansicht öffnen → Als PDF speichern',         action:()=>window.print(), clr:C.accent},
+          {label:'JSON Backup',   sub:'Rohdaten für Backup oder Import',                 action:exportJSON, clr:C.water},
+        ].map(b=>(
+          <div key={b.label} style={{marginBottom:12}}>
+            <div style={{fontSize:13, fontWeight:600, marginBottom:2}}>{b.label}</div>
+            <div style={{fontSize:11, color:C.muted, marginBottom:10, lineHeight:1.5}}>{b.sub}</div>
+            <button style={ST.btn(b.clr)} onClick={b.action}>{b.label} herunterladen</button>
+          </div>
+        ))}
+      </Section>
+
+      <Section id="stats" label="Statistik" sub={`${entries.length} Einträge gesamt`}>
         {Object.entries(METRICS).map(([key,m])=>{
           const n=entries.filter(e=>e.type===key).length;
-          return <div key={key} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
+          return <div key={key} style={{display:'flex',justifyContent:'space-between',alignItems:'center',
+            padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
             <div style={{display:'flex',alignItems:'center',gap:10}}>
               <div style={{width:3,height:12,background:m.color,borderRadius:1}}/>
               <span style={{fontSize:13}}>{m.label}</span>
@@ -3250,11 +3280,11 @@ function App() {
           <span style={{fontWeight:600}}>Gesamt</span>
           <span style={{fontWeight:700,color:C.accent}}>{entries.length}</span>
         </div>
-      </div>
+      </Section>
 
-      <div style={{...ST.card,borderColor:`${C.danger}30`,background:'#1A0C08'}}>
-        <div style={{fontSize:12,fontWeight:600,color:C.danger,marginBottom:4}}>Daten löschen</div>
-        <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.6}}>Alle Einträge permanent entfernen.</div>
+      <div style={{...ST.card,borderColor:`${C.danger}20`,background:'#180A08',marginTop:4}}>
+        <div style={{fontSize:12,fontWeight:600,color:C.danger,marginBottom:3}}>Daten löschen</div>
+        <div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.5}}>Alle Einträge permanent entfernen.</div>
         <button style={ST.outbtn(C.danger)} onClick={()=>{ if(confirm('Wirklich alle Daten löschen?')){setEntries([]);localStorage.removeItem('entries');} }}>Alle Daten löschen</button>
       </div>
     </>;
@@ -3272,7 +3302,7 @@ function App() {
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>{entries.length} Einträge · lokal gespeichert</span>
-          <span style={{color:C.faint}}>v4.9</span>
+          <span style={{color:C.faint}}>v5.0</span>
         </div>
       </header>
 
