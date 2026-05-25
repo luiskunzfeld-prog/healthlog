@@ -2121,6 +2121,63 @@ function KalorienRechner({ settings, onSave, lastWeight, onUpdateSettings }) {
 }
 
 
+// ── Sortierbare Chart-Liste (kompakt, ▲/▼-Buttons) ───────────────────────────
+function SortableChartList({ initialOrder, defs, onSave, onCancel }) {
+  const [localOrder, setLocalOrder] = useState([...initialOrder]);
+  const defMap = Object.fromEntries(defs.map(d=>[d.id,d]));
+
+  const move = (idx, dir) => {
+    const target = idx + dir;
+    if (target < 0 || target >= localOrder.length) return;
+    setLocalOrder(prev => {
+      const next = [...prev];
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+  };
+
+  return (
+    <div>
+      <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:8}}>
+        Reihenfolge anpassen
+      </div>
+      {localOrder.map((id, idx) => {
+        const def = defMap[id];
+        if (!def) return null;
+        const isFirst = idx === 0;
+        const isLast  = idx === localOrder.length - 1;
+        return (
+          <div key={id} style={{display:'flex',alignItems:'center',gap:8,
+            padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
+            <div style={{width:3,height:12,background:def.color,borderRadius:1,flexShrink:0}}/>
+            <span style={{flex:1,fontSize:13,color:C.text,lineHeight:1.2}}>
+              {def.title.split(' (')[0]}
+            </span>
+            <button
+              onClick={()=>move(idx,-1)}
+              style={{background:'none',border:'none',padding:'4px 8px',
+                color:isFirst?C.faint:C.muted,fontSize:14,lineHeight:1,
+                cursor:isFirst?'default':'pointer',opacity:isFirst?0.3:1}}>▲</button>
+            <button
+              onClick={()=>move(idx,1)}
+              style={{background:'none',border:'none',padding:'4px 8px',
+                color:isLast?C.faint:C.muted,fontSize:14,lineHeight:1,
+                cursor:isLast?'default':'pointer',opacity:isLast?0.3:1}}>▼</button>
+          </div>
+        );
+      })}
+      <div style={{display:'flex',gap:8,marginTop:12}}>
+        <button style={{...ST.outbtn(C.muted),flex:1,padding:10,fontSize:13}} onClick={onCancel}>
+          Abbrechen
+        </button>
+        <button style={{...ST.btn(C.accent),flex:2,padding:10,fontSize:13}} onClick={()=>onSave(localOrder)}>
+          ✓ Speichern
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 function App() {
   const [tab,setTab]           = useState('dashboard');
@@ -2542,9 +2599,9 @@ function App() {
         </button>
       </div>
 
-      {/* Drag-and-Drop Sortierung */}
+      {/* Reihenfolge bearbeiten */}
       {editMode&&(
-        <div style={{...ST.card,marginBottom:16,padding:'12px 14px'}}>
+        <div style={{...ST.card,marginBottom:16,padding:'12px 14px',overflowY:'visible'}}>
           <SortableChartList
             initialOrder={order}
             defs={CHART_DEFS}
