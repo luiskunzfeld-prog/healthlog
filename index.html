@@ -28,6 +28,33 @@
   </style>
 </head>
 <body>
+<!-- ── Splash Screen ─────────────────────────────────────────────────────────── -->
+<div id="splash" style="
+  position:fixed;inset:0;z-index:9999;
+  background:#0A0806;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+  transition:opacity 0.4s ease, visibility 0.4s ease;
+">
+  <div style="text-align:center;">
+    <div style="
+      font-family:'DM Serif Display',Georgia,serif;
+      font-size:32px;font-weight:400;letter-spacing:0.5px;
+      color:#EAE0D0;
+    ">Health<span style="color:#C8B89A">Log</span></div>
+    <div style="font-size:11px;color:#3A3028;letter-spacing:1.5px;text-transform:uppercase;margin-top:4px;">Wird geladen…</div>
+  </div>
+  <div style="display:flex;gap:6px;margin-top:8px;">
+    <span class="dot" style="width:5px;height:5px;border-radius:50%;background:#C8B89A;animation:pulse 1.2s ease-in-out infinite;"></span>
+    <span class="dot" style="width:5px;height:5px;border-radius:50%;background:#C8B89A;animation:pulse 1.2s ease-in-out 0.2s infinite;"></span>
+    <span class="dot" style="width:5px;height:5px;border-radius:50%;background:#C8B89A;animation:pulse 1.2s ease-in-out 0.4s infinite;"></span>
+  </div>
+</div>
+<style>
+  @keyframes pulse {
+    0%,100%{opacity:0.2;transform:scale(0.8);}
+    50%{opacity:1;transform:scale(1.1);}
+  }
+</style>
 <div id="root"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin></script>
@@ -2215,6 +2242,16 @@ function App() {
   useEffect(()=>{ store.set('entries',entries); },[entries]);
   useEffect(()=>{ store.set('settings',settings); },[settings]);
 
+  // Splash ausblenden sobald App gemounted ist
+  useEffect(()=>{
+    const splash = document.getElementById('splash');
+    if (!splash) return;
+    splash.style.opacity = '0';
+    splash.style.visibility = 'hidden';
+    const t = setTimeout(()=>{ if(splash.parentNode) splash.parentNode.removeChild(splash); }, 450);
+    return ()=>clearTimeout(t);
+  }, []);
+
   const add = useCallback((type,data,date=toDay())=>{
     setEntries(prev=>[{id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type,data},...prev]);
     setAF(null);
@@ -2928,6 +2965,221 @@ function App() {
     </>;
   }
 
+  // ── Tagebuch ───────────────────────────────────────────────────────────────
+  function Tagebuch() {
+    const [selDate, setSelDate] = useState(toDay());
+
+    const goPrev = () => {
+      const d = new Date(selDate+'T12:00:00'); d.setDate(d.getDate()-1);
+      setSelDate(d.toISOString().slice(0,10));
+    };
+    const goNext = () => {
+      const d = new Date(selDate+'T12:00:00'); d.setDate(d.getDate()+1);
+      if (d.toISOString().slice(0,10) <= toDay()) setSelDate(d.toISOString().slice(0,10));
+    };
+
+    const dayEs = useMemo(()=>
+      entries.filter(e=>e.date===selDate).sort((a,b)=>a.ts-b.ts),
+    [selDate, entries]);
+
+    const ernEs  = dayEs.filter(e=>e.type==='ernaehrung');
+    const kcalT  = ernEs.reduce((s,e)=>s+(e.data.calories||0),0);
+    const protT  = ernEs.reduce((s,e)=>s+(e.data.protein||0),0);
+    const carbT  = ernEs.reduce((s,e)=>s+(e.data.carbs||0),0);
+    const fatT   = ernEs.reduce((s,e)=>s+(e.data.fat||0),0);
+    const wtrT   = ernEs.reduce((s,e)=>s+(e.data.water||0),0);
+    const otherEs = dayEs.filter(e=>e.type!=='ernaehrung');
+
+    const fmtLong = d => {
+      try { return new Date(d+'T12:00:00').toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long',year:'numeric'}); }
+      catch { return d; }
+    };
+
+    const EntryActions = ({e}) => (
+      <div style={{display:'flex',gap:6,marginTop:10}}>
+        <button onClick={()=>setEditing(e)}
+          style={{fontSize:11,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 12px',cursor:'pointer'}}>
+          Bearbeiten
+        </button>
+        <button onClick={()=>{ if(confirm('Eintrag löschen?')) del(e.id); }}
+          style={{fontSize:11,color:C.danger,background:'none',border:`1px solid ${C.danger}30`,borderRadius:6,padding:'4px 12px',cursor:'pointer'}}>
+          Löschen
+        </button>
+      </div>
+    );
+
+    const mealLabels = {Frühstück:'🌅',Mittagessen:'☀️',Abendessen:'🌙',Snack:'🍎'};
+
+    return <>
+      {/* ── Datums-Navigation ── */}
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+        <button onClick={goPrev}
+          style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,width:40,height:40,
+            display:'flex',alignItems:'center',justifyContent:'center',
+            color:C.accent,fontSize:20,cursor:'pointer',flexShrink:0}}>‹</button>
+        <input type="date" max={toDay()} value={selDate}
+          onChange={e=>setSelDate(e.target.value)}
+          style={{...ST.datePicker,marginBottom:0,flex:1,textAlign:'center'}}/>
+        <button onClick={goNext}
+          style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,width:40,height:40,
+            display:'flex',alignItems:'center',justifyContent:'center',
+            color:selDate>=toDay()?C.faint:C.accent,fontSize:20,cursor:'pointer',flexShrink:0}}
+          disabled={selDate>=toDay()}>›</button>
+      </div>
+      <div style={{fontSize:12,color:C.muted,textAlign:'center',marginBottom:20,letterSpacing:0.2}}>
+        {fmtLong(selDate)}
+      </div>
+
+      {dayEs.length===0 ? (
+        <div style={{textAlign:'center',padding:'60px 0 40px'}}>
+          <div style={{fontSize:36,marginBottom:14}}>📅</div>
+          <div style={{fontSize:14,color:C.muted}}>Keine Einträge an diesem Tag</div>
+          <div style={{fontSize:11,color:C.faint,marginTop:6}}>Wähle ein anderes Datum oder füge Einträge hinzu</div>
+        </div>
+      ):<>
+
+        {/* ── Quick Summary Pills ── */}
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:18}}>
+          <div style={ST.pill(C.accent)}>{dayEs.length} {dayEs.length===1?'Eintrag':'Einträge'}</div>
+          {kcalT>0 && <div style={ST.pill(C.water)}>{kcalT} kcal</div>}
+          {wtrT>0  && <div style={ST.pill(C.water)}>💧 {wtrT} ml</div>}
+        </div>
+
+        {/* ── Ernährung ── */}
+        {ernEs.length>0&&<>
+          <div style={ST.secttl}>Ernährung</div>
+
+          {/* Makro-Tagesübersicht */}
+          {kcalT>0&&<div style={{...ST.card,marginBottom:12}}>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:12}}>
+              Tagessumme
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:4,textAlign:'center'}}>
+              {[['Kalorien',kcalT,'kcal',C.accent],
+                ['Eiweiß',+protT.toFixed(1),'g',C.sport],
+                ['Kohlenhydr.',+carbT.toFixed(1),'g',C.water],
+                ['Fett',+fatT.toFixed(1),'g',C.mood],
+              ].map(([l,v,u,c])=>(
+                <div key={l} style={{background:C.cardAlt,borderRadius:8,padding:'10px 4px'}}>
+                  <div style={{fontSize:15,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
+                  <div style={{fontSize:9,color:C.muted,marginTop:2}}>{u}</div>
+                  <div style={{fontSize:8,color:C.faint,letterSpacing:0.5,marginTop:1,textTransform:'uppercase'}}>{l}</div>
+                </div>
+              ))}
+            </div>
+            {wtrT>0&&<div style={{marginTop:10,fontSize:12,color:C.water,display:'flex',alignItems:'center',gap:6}}>
+              <span>💧</span><span>{wtrT} ml Wasser</span>
+            </div>}
+            {settings.kalorienZiel&&<>
+              <div style={{height:4,background:C.border,borderRadius:2,marginTop:10}}>
+                <div style={{width:Math.min(100,Math.round(kcalT/settings.kalorienZiel*100))+'%',
+                  height:'100%',background:C.accent,borderRadius:2,transition:'width .3s'}}/>
+              </div>
+              <div style={{fontSize:10,color:C.muted,marginTop:3,textAlign:'right'}}>
+                {Math.round(kcalT/settings.kalorienZiel*100)}% von {settings.kalorienZiel} kcal Tagesziel
+              </div>
+            </>}
+          </div>}
+
+          {/* Einzelne Mahlzeiten */}
+          {ernEs.map(e=>{
+            const d=e.data;
+            const isWater = !d.productName && d.water>0;
+            const name = d.productName || (isWater?'Wasser':'Manuell eingetragen');
+            const hasMacros = (d.protein||0)+(d.carbs||0)+(d.fat||0) > 0;
+            return <div key={e.id} style={{...ST.card,marginBottom:6,padding:'12px 14px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text,
+                    overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                    {d.mealTag&&<span style={{marginRight:6}}>{mealLabels[d.mealTag]||''}</span>}
+                    {name}
+                  </div>
+                  {d.brand&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{d.brand}</div>}
+                  {d.quantity&&<div style={{fontSize:10,color:C.faint,marginTop:2}}>{d.quantity} {d.unit}</div>}
+                </div>
+                {d.calories>0&&<div style={{fontSize:15,fontWeight:700,color:C.accent,flexShrink:0}}>
+                  {d.calories} kcal
+                </div>}
+              </div>
+              {hasMacros&&<div style={{display:'flex',gap:10,marginTop:8,paddingTop:8,
+                borderTop:`1px solid ${C.border}44`,flexWrap:'wrap'}}>
+                {d.protein>0&&<div style={{fontSize:11}}>
+                  <span style={{color:C.sport,fontWeight:600}}>{d.protein}g</span>
+                  <span style={{color:C.faint,marginLeft:2}}>Eiweiß</span>
+                </div>}
+                {d.carbs>0&&<div style={{fontSize:11}}>
+                  <span style={{color:C.water,fontWeight:600}}>{d.carbs}g</span>
+                  <span style={{color:C.faint,marginLeft:2}}>KH</span>
+                </div>}
+                {d.fat>0&&<div style={{fontSize:11}}>
+                  <span style={{color:C.mood,fontWeight:600}}>{d.fat}g</span>
+                  <span style={{color:C.faint,marginLeft:2}}>Fett</span>
+                </div>}
+                {d.fiber>0&&<div style={{fontSize:11}}>
+                  <span style={{color:C.success,fontWeight:600}}>{d.fiber}g</span>
+                  <span style={{color:C.faint,marginLeft:2}}>Ballaststoffe</span>
+                </div>}
+              </div>}
+              {d.water>0&&!hasMacros&&<div style={{fontSize:11,color:C.water,marginTop:6}}>
+                💧 {d.water} ml
+              </div>}
+              {d.note&&<div style={{fontSize:11,color:C.muted,marginTop:6,fontStyle:'italic',lineHeight:1.4}}>
+                {d.note}
+              </div>}
+              <EntryActions e={e}/>
+            </div>;
+          })}
+        </>}
+
+        {/* ── Alle anderen Metriken ── */}
+        {Object.entries(METRICS).filter(([key])=>key!=='ernaehrung').map(([key,m])=>{
+          const mes = otherEs.filter(e=>e.type===key);
+          if (!mes.length) return null;
+          return <div key={key}>
+            <div style={ST.secttl}>{m.label}</div>
+            {mes.map(e=>{
+              const d=e.data;
+              let lines = [];
+              if(key==='gewicht'){
+                lines=[`${d.weight} kg`,d.bmi?`BMI ${d.bmi}`:null,d.fat?`${d.fat}% Körperfett`:null];
+              } else if(key==='sport'){
+                lines=[`${d.duration} min · ${d.sportType||''}`,`Intensität ${d.intensity}/5`,d.calories?`${d.calories} kcal verbrannt`:null];
+              } else if(key==='stimmung'){
+                lines=[`Stimmung ${d.mood}/10`,`Energie ${d.energy}/10`,`Stress ${d.stress}/10`];
+              } else if(key==='schlaf'){
+                const ql=['','Sehr schlecht','Schlecht','Ok','Gut','Sehr gut'];
+                lines=[`${d.hours} Std`,`Qualität: ${ql[d.quality]||d.quality}`];
+              } else if(key==='schritte'){
+                lines=[`${(d.steps||0).toLocaleString('de-DE')} Schritte`];
+              } else if(key==='herz'){
+                lines=[`${d.bpm} bpm`,d.context||null];
+              } else if(key==='blutdruck'){
+                lines=[`${d.sys}/${d.dia} mmHg`,d.pulse?`Puls: ${d.pulse} bpm`:null];
+              } else if(key==='koerpermass'){
+                lines=[d.waist?`Taille: ${d.waist} cm`:null, d.hip?`Hüfte: ${d.hip} cm`:null,
+                  d.chest?`Brust: ${d.chest} cm`:null, d.arm?`Arm: ${d.arm} cm`:null].filter(Boolean);
+              }
+              return <div key={e.id} style={{...ST.card,marginBottom:6,padding:'12px 14px'}}>
+                <div style={{display:'flex',alignItems:'flex-start',gap:8}}>
+                  <div style={{width:3,minHeight:30,background:m.color,borderRadius:2,flexShrink:0,marginTop:2}}/>
+                  <div style={{flex:1}}>
+                    {lines.filter(Boolean).map((l,i)=>(
+                      <div key={i} style={{fontSize:i===0?14:12,fontWeight:i===0?600:400,
+                        color:i===0?m.color:C.muted,lineHeight:1.5}}>{l}</div>
+                    ))}
+                    {d.note&&<div style={{fontSize:11,color:C.faint,marginTop:4,fontStyle:'italic'}}>{d.note}</div>}
+                  </div>
+                </div>
+                <EntryActions e={e}/>
+              </div>;
+            })}
+          </div>;
+        })}
+      </>}
+    </>;
+  }
+
   // ── Export & Import ────────────────────────────────────────────────────────
   function ExportTab() {
     return <>
@@ -2974,7 +3226,7 @@ function App() {
   }
 
   // ── Nav ────────────────────────────────────────────────────────────────────
-  const NAV=[{id:'dashboard',l:'Heute'},{id:'eingabe',l:'Eingabe'},{id:'verlauf',l:'Verlauf'},{id:'export',l:'Daten'}];
+  const NAV=[{id:'dashboard',l:'Heute'},{id:'eingabe',l:'Eingabe'},{id:'tagebuch',l:'Journal'},{id:'verlauf',l:'Verlauf'},{id:'export',l:'Daten'}];
   const bot='env(safe-area-inset-bottom,0px)', top='env(safe-area-inset-top,0px)';
 
   return (
@@ -2985,13 +3237,14 @@ function App() {
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>{entries.length} Einträge · lokal gespeichert</span>
-          <span style={{color:C.faint}}>v4.2</span>
+          <span style={{color:C.faint}}>v4.3</span>
         </div>
       </header>
 
       <main style={{padding:'24px 24px 0'}}>
         {tab==='dashboard' && <Dashboard/>}
         {tab==='eingabe'   && <Eingabe/>}
+        {tab==='tagebuch'  && <Tagebuch/>}
         {tab==='verlauf'   && <Verlauf/>}
         {tab==='export'    && <ExportTab/>}
       </main>
