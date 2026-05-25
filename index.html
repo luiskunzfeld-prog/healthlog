@@ -542,153 +542,185 @@ class ErrorBoundary extends React.Component {
 }
 
 function ErnaehrungForm({ add, initialData, onSave, onClose }) {
-  const [tab,setTab]       = useState('suche');
+  const [tab,    setTab]  = useState('suche');
+  const [date,   setDate] = useState(toDay());
+  const [mealTag,setMT]   = useState(initialData?.mealTag||'');
+
   // Suche
-  const [searchQ,setSQ]    = useState('');
-  const [results,setRes]   = useState([]);
-  const [srching,setSrch]  = useState(false);
-  const [selProd,setSel]   = useState(null);
-  const [qty,setQty]       = useState('100');
-  const [unit,setUnit]     = useState('g');
-  // Wasser/Allgemein
-  const [water,setW]       = useState(initialData?initialData.water:0);
-  const [mealQ,setMQ]      = useState(initialData?initialData.mealQ:3);
-  const [cal,setCal]       = useState(initialData&&initialData.calories!=null?String(initialData.calories):'');
-  const [note,setNote]     = useState(initialData?initialData.note||'':'');
-  const [mealTag,setMT]    = useState(initialData?.mealTag||'');
-  // Manuell
-  const [mName,setMN]      = useState('');
-  const [mKcal,setMK]      = useState('');
-  const [mProt,setMP]      = useState('');
-  const [mCarb,setMC]      = useState('');
-  const [mFat,setMF]       = useState('');
-  const [mQty,setMQ2]      = useState('100');
-  const [mUnit,setMU]      = useState('g');
-  const [scanErr,setScanE] = useState('');
+  const [searchQ,setSQ]   = useState('');
+  const [results,setRes]  = useState([]);
+  const [loading,setLoad] = useState(false);
+  const [selProd,setSel]  = useState(null);
+  const [qty,    setQty]  = useState('100');
+  const [unit,   setUnit] = useState('g');
+  const [scanErr,setScanE]= useState('');
+  const captureRef        = useRef(null);
+  const abortRef          = useRef(null);
 
-  const [date,setDate]     = useState(toDay());
-  const captureRef         = useRef(null);
+  // Wasser-Tab
+  const [water, setW]     = useState(initialData?.water ?? 0);
+  const [mealQ, setMQ]    = useState(initialData?.mealQ ?? 3);
+  const [cal,   setCal]   = useState(initialData?.calories != null ? String(initialData.calories) : '');
+  const [note,  setNote]  = useState(initialData?.note || '');
 
-  // ── Suche ────────────────────────────────────────────────────────────────
-  const searchCtrl = useRef(null); // laufenden Fetch abbrechen
+  // Manuell-Tab
+  const [mName,  setMN]  = useState('');
+  const [mKcal,  setMK]  = useState('');
+  const [mProt,  setMP]  = useState('');
+  const [mCarb,  setMC]  = useState('');
+  const [mSugar, setMSu] = useState('');
+  const [mFat,   setMF]  = useState('');
+  const [mSatFat,setMSF] = useState('');
+  const [mFiber, setMFi] = useState('');
+  const [mSalt,  setMSa] = useState('');
+  const [mQty,   setMQ2] = useState('100');
+  const [mUnit,  setMU]  = useState('g');
 
-  const handleSearch = async q => {
-    // Vorherigen Fetch abbrechen
-    if (searchCtrl.current) { try { searchCtrl.current.abort(); } catch(e){} }
-
+  // ── Suche ──────────────────────────────────────────────────────────────────
+  const doSearch = async q => {
+    if (abortRef.current) { try { abortRef.current.abort(); } catch(e){} abortRef.current = null; }
+    let local = [];
+    try { local = searchLocal(q); } catch(e) {}
+    setRes(local);
+    if (!q || q.trim().length < 2) { setLoad(false); return; }
+    setLoad(true);
     try {
-      const local = searchLocal(q);
-      setRes(local);
-      if (!q.trim() || q.length < 2) { setSrch(false); return; }
-      setSrch(true);
-
       const ctrl = new AbortController();
-      searchCtrl.current = ctrl;
-      setTimeout(() => { try { ctrl.abort(); } catch(e){} }, 8000);
-
-      const url = `https://de.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&action=process&json=1&page_size=15&sort_by=unique_scans_n&fields=code,product_name,brands,nutriments,product_quantity_unit`;
-      const res  = await fetch(url, { signal: ctrl.signal });
-      const json = await res.json();
-
-      if (ctrl.signal.aborted) return; // neuere Suche ist unterwegs
-
-      const off = (json.products||[]).filter(p=>p.product_name?.trim()).map(p=>({
-        code:p.code, name:p.product_name.trim(),
+      abortRef.current = ctrl;
+      const timer = setTimeout(()=>{ try{ctrl.abort();}catch(e){} }, 7000);
+      const url = `https://de.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q.trim())}&action=process&json=1&page_size=15&sort_by=unique_scans_n&fields=code,product_name,brands,nutriments,product_quantity_unit`;
+      const r = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (ctrl.signal.aborted) return;
+      const json = await r.json();
+      const remote = (json.products||[]).filter(p=>p?.product_name?.trim()).map(p=>({
+        code:p.code||'', name:p.product_name.trim(),
         brand:(p.brands||'').split(',')[0].trim(),
         isLiq:(p.product_quantity_unit||'').toLowerCase().includes('ml'),
         kcal:Math.round(pn((p.nutriments||{})['energy-kcal_100g'])),
         nutriments:p.nutriments||{}, pqu:p.product_quantity_unit||'',
       }));
-      const localNames = new Set(local.map(x=>x.name.toLowerCase()));
-      setRes([...local, ...off.filter(x=>!localNames.has(x.name.toLowerCase()))].slice(0,20));
-    } catch(e) {
-      // AbortError ist erwartet — kein Crash
-      if (e?.name !== 'AbortError') console.warn('Suche fehlgeschlagen:', e?.message);
-    } finally {
-      setSrch(false);
-    }
+      if (!ctrl.signal.aborted) {
+        const lNames = new Set(local.map(x=>x.name.toLowerCase()));
+        setRes([...local, ...remote.filter(x=>!lNames.has(x.name.toLowerCase()))].slice(0,20));
+      }
+    } catch(err) { /* AbortError oder Netzwerkfehler → lokale Ergebnisse bleiben */ }
+    finally { setLoad(false); }
   };
 
-  // ── Barcode-Foto ─────────────────────────────────────────────────────────
-  const handleCapture = async e => {
-    const file=e.target.files?.[0]; if(!file)return; e.target.value=''; setScanE('');
+  const pickProduct = r => {
     try {
-      const url=URL.createObjectURL(file);
-      const img=new Image();
-      await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=url;});
-      const result=await detectFromImage(img);
+      const n = r.nutriments || {};
+      setSel({
+        name: r.name||'', brand: r.brand||'', isLiq: !!r.isLiq,
+        per100: {
+          kcal:   r.kcal || Math.round(pn(n['energy-kcal_100g'])) || 0,
+          protein: +pn(n['proteins_100g']).toFixed(1),
+          carbs:   +pn(n['carbohydrates_100g']).toFixed(1),
+          sugar:   +pn(n['sugars_100g']).toFixed(1),
+          fat:     +pn(n['fat_100g']).toFixed(1),
+          satFat:  +pn(n['saturated-fat_100g']).toFixed(1),
+          fiber:   +pn(n['fiber_100g']).toFixed(1),
+          salt:    +pn(n['salt_100g'] || pn(n['sodium_100g'])*2.5).toFixed(2),
+        }
+      });
+      setUnit(r.isLiq ? 'ml' : 'g');
+      setQty(r.isLiq ? '200' : '100');
+    } catch(e) { console.warn('Produkt auswählen fehlgeschlagen:', e?.message); }
+  };
+
+  const calcN = () => {
+    if (!selProd?.per100) return null;
+    const q = Math.max(+qty||1, 1), p = selProd.per100;
+    const f = (v,d=1) => +((v||0)*q/100).toFixed(d);
+    return { kcal:Math.round((p.kcal||0)*q/100), protein:f(p.protein),
+      carbs:f(p.carbs), sugar:f(p.sugar), fat:f(p.fat),
+      satFat:f(p.satFat), fiber:f(p.fiber), salt:f(p.salt,2) };
+  };
+  const N = calcN();
+  const presets = selProd?.isLiq ? [100,200,250,330,500] : [25,50,100,150,200];
+
+  // ── Barcode ────────────────────────────────────────────────────────────────
+  const handleCapture = async e => {
+    const file = e?.target?.files?.[0]; if (!file) return; e.target.value=''; setScanE('');
+    try {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      await new Promise((ok,fail)=>{img.onload=ok;img.onerror=fail;img.src=url;});
+      const hit = await detectFromImage(img).catch(()=>null);
       URL.revokeObjectURL(url);
-      if(!result){setScanE('Kein Barcode erkannt — bessere Beleuchtung versuchen'); return;}
-      const localHit=LMDB.find(f=>f.ean&&f.ean===result.code);
-      if(localHit){selectProduct(lmdbToItem(localHit)); return;}
-      const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),8000);
-      const res=await fetch(`https://world.openfoodfacts.org/api/v2/product/${result.code}.json?fields=product_name,brands,nutriments,product_quantity_unit`,{signal:ctrl.signal});
-      const json=await res.json();
-      if(json.status===1&&json.product?.product_name){
-        const p=json.product, n=p.nutriments||{};
-        const isLiq=(p.product_quantity_unit||'').toLowerCase().includes('ml');
-        setSel({name:p.product_name.trim(),brand:(p.brands||'').split(',')[0].trim(),isLiq,
-          per100:{kcal:Math.round(pn(n['energy-kcal_100g'])||(pn(n['energy_100g'])/4.184)||0),
-            protein:+(pn(n['proteins_100g']).toFixed(1)),carbs:+(pn(n['carbohydrates_100g']).toFixed(1)),
-            fat:+(pn(n['fat_100g']).toFixed(1)),sugar:+(pn(n['sugars_100g']).toFixed(1)),fiber:+(pn(n['fiber_100g']||0).toFixed(1))}});
-        setUnit(isLiq?'ml':'g'); setQty(isLiq?'200':'100');
+      if (!hit) { setScanE('Kein Barcode erkannt — bessere Beleuchtung versuchen'); return; }
+      const local = LMDB.find(f=>f.ean&&f.ean===hit.code);
+      if (local) { pickProduct(lmdbToItem(local)); return; }
+      const ctrl = new AbortController(); setTimeout(()=>ctrl.abort(),8000);
+      const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${hit.code}.json?fields=product_name,brands,nutriments,product_quantity_unit`,{signal:ctrl.signal});
+      const json = await res.json();
+      if (json.status===1 && json.product?.product_name) {
+        const p=json.product;
+        pickProduct({name:p.product_name.trim(),brand:(p.brands||'').split(',')[0].trim(),
+          isLiq:(p.product_quantity_unit||'').toLowerCase().includes('ml'),
+          kcal:0, nutriments:p.nutriments||{}, pqu:p.product_quantity_unit||''});
       } else { setScanE('Produkt nicht gefunden — manuell eingeben'); }
-    } catch(err){ setScanE('Netzwerkfehler beim Barcode-Lookup'); }
+    } catch(err) { setScanE('Fehler: '+(err?.message||'Unbekannt')); }
   };
 
-  const selectProduct = r => {
-    const n=r.nutriments||{};
-    setSel({name:r.name,brand:r.brand||'',isLiq:r.isLiq,
-      per100:{kcal:r.kcal||Math.round(pn(n['energy-kcal_100g'])),
-        protein:+(pn(n['proteins_100g']).toFixed(1)),
-        carbs:+(pn(n['carbohydrates_100g']).toFixed(1)),
-        fat:+(pn(n['fat_100g']).toFixed(1)),
-        sugar:+(pn(n['sugars_100g']).toFixed(1)),
-        fiber:+(pn(n['fiber_100g']).toFixed(1))}});
-    setUnit(r.isLiq?'ml':'g'); setQty(r.isLiq?'200':'100');
-  };
-
-  const calcMacros = () => {
-    if(!selProd)return null;
-    const q=Math.max(+qty||1,1),p=selProd.per100;
-    return {kcal:Math.round((p.kcal||0)*q/100),protein:+((p.protein||0)*q/100).toFixed(1),
-            carbs:+((p.carbs||0)*q/100).toFixed(1),fat:+((p.fat||0)*q/100).toFixed(1)};
-  };
-  const macros=calcMacros();
-  const presets=selProd?.isLiq?[100,200,250,330,500]:[25,50,100,150,200];
-
-  // ── Save ──────────────────────────────────────────────────────────────────
+  // ── Speichern ──────────────────────────────────────────────────────────────
   const saveProduct = () => {
-    if(!selProd)return;
-    const m=macros||{kcal:0,protein:0,carbs:0,fat:0};
-    const d={water:selProd.isLiq?(+qty||0):0,mealQ:3,mealTag,calories:m.kcal,
-      protein:m.protein,carbs:m.carbs,fat:m.fat,
-      productName:selProd.name,brand:selProd.brand,quantity:+qty,unit,barcode:'',note:''};
-    onSave?onSave(d):add('ernaehrung',d,date);
+    if (!selProd || !N) return;
+    const d = { mealTag, water:selProd.isLiq?(+qty||0):0,
+      calories:N.kcal, protein:N.protein, carbs:N.carbs, sugar:N.sugar,
+      fat:N.fat, satFat:N.satFat, fiber:N.fiber, salt:N.salt,
+      productName:selProd.name, brand:selProd.brand,
+      quantity:+qty, unit, barcode:'', note:'' };
+    onSave ? onSave(d) : add('ernaehrung', d, date);
   };
   const saveWasser = () => {
-    const d={water,mealQ,calories:cal?+cal:null,mealTag,note,productName:null,brand:''};
-    onSave?onSave(d):add('ernaehrung',d,date);
+    const d = { mealTag, water, mealQ, calories:cal?+cal:null, note, productName:null, brand:'' };
+    onSave ? onSave(d) : add('ernaehrung', d, date);
   };
   const saveManuell = () => {
-    const q=Math.max(+mQty||1,1);
-    const d={water:mUnit==='ml'?q:0,mealQ:3,mealTag,
+    const q = Math.max(+mQty||1,1);
+    const p = (v,d=1) => +((+v||0)*q/100).toFixed(d);
+    const d = { mealTag, water:mUnit==='ml'?q:0,
       calories:Math.round((+mKcal||0)*q/100),
-      protein:+((+mProt||0)*q/100).toFixed(1),carbs:+((+mCarb||0)*q/100).toFixed(1),
-      fat:+((+mFat||0)*q/100).toFixed(1),
-      productName:mName||'Manuell eingetragen',brand:'',quantity:q,unit:mUnit,barcode:'',note};
-    onSave?onSave(d):add('ernaehrung',d,date);
+      protein:p(mProt), carbs:p(mCarb), sugar:p(mSugar),
+      fat:p(mFat), satFat:p(mSatFat), fiber:p(mFiber),
+      salt:p(mSalt,2), productName:mName||'Manuell eingetragen',
+      brand:'', quantity:q, unit:mUnit, barcode:'', note };
+    onSave ? onSave(d) : add('ernaehrung', d, date);
   };
+
+  // ── Nährstoff-Tabelle ──────────────────────────────────────────────────────
+  const NutriTable = ({n}) => (
+    <div style={{marginBottom:14,borderRadius:8,overflow:'hidden',border:`1px solid ${C.border}`}}>
+      {[
+        ['Kalorien',         n.kcal+' kcal',  C.accent,  true],
+        ['Eiweiß',           n.protein+' g',  C.sport,   true],
+        ['Kohlenhydrate',    n.carbs+' g',    C.water,   true],
+        n.sugar>0  ? ['  davon Zucker',  n.sugar+' g',   C.muted,   false] : null,
+        ['Fett',             n.fat+' g',      C.mood,    true],
+        n.satFat>0 ? ['  ges. Fettsäuren',n.satFat+' g',C.muted,   false] : null,
+        n.fiber>0  ? ['Ballaststoffe',   n.fiber+' g',  C.success, true] : null,
+        n.salt>0   ? ['Salz',            n.salt+' g',   C.muted,   true] : null,
+      ].filter(Boolean).map(([l,v,col,main],i,arr)=>(
+        <div key={l} style={{display:'flex',justifyContent:'space-between',alignItems:'center',
+          padding:`${main?8:5}px ${main?12:20}px`,
+          background:i%2===0?`${C.bg}`:C.card,
+          borderBottom:i<arr.length-1?`1px solid ${C.border}44`:'none'}}>
+          <span style={{fontSize:main?12:11,color:main?C.muted:C.faint}}>{l.trim()}</span>
+          <span style={{fontSize:main?14:12,fontWeight:main?600:400,color:col}}>{v}</span>
+        </div>
+      ))}
+    </div>
+  );
 
   const TABS=[{id:'suche',l:'🔍 Produkt'},{id:'wasser',l:'💧 Wasser'},{id:'manuell',l:'✎ Manuell'}];
 
   return <>
     <input ref={captureRef} type="file" accept="image/*" capture="environment"
       onChange={handleCapture} style={{display:'none'}}/>
+    {!initialData && <DatePickerField value={date} onChange={setDate}/>}
 
-    {!initialData&&<DatePickerField value={date} onChange={setDate}/>}
-
-    {/* Mahlzeit-Tag */}
     <label style={ST.lbl}>Mahlzeit</label>
     <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
       {['Frühstück','Mittagessen','Abendessen','Snack'].map(t=>(
@@ -700,7 +732,6 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
       ))}
     </div>
 
-    {/* Tab-Leiste */}
     <div style={{display:'flex',marginBottom:16,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
       {TABS.map((t,i)=>(
         <button key={t.id} onClick={()=>setTab(t.id)}
@@ -708,62 +739,59 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
             background:tab===t.id?`${C.water}18`:'transparent',
             color:tab===t.id?C.water:C.muted,border:'none',
             borderRight:i<TABS.length-1?`1px solid ${C.border}`:'none'}}>
-          {t.l}
-        </button>
+          {t.l}</button>
       ))}
     </div>
 
-    {/* ── TAB: SUCHE ── */}
+    {/* ── SUCHE ── */}
     {tab==='suche'&&<>
       {!selProd?<>
         <div style={{display:'flex',gap:8,marginBottom:8}}>
-          <input style={{...ST.inp,marginBottom:0,flex:1}}
-            placeholder="Apfel, Joghurt, Haferflocken…"
+          <input style={{...ST.inp,marginBottom:0,flex:1}} placeholder="Apfel, Joghurt, Haferflocken…"
             value={searchQ} autoComplete="off"
-            onChange={e=>{setSQ(e.target.value);handleSearch(e.target.value);}}
-            onKeyDown={e=>e.key==='Enter'&&handleSearch(searchQ)}/>
+            onChange={e=>{setSQ(e.target.value);doSearch(e.target.value);}}
+            onKeyDown={e=>e.key==='Enter'&&doSearch(searchQ)}/>
           <button onClick={()=>captureRef.current?.click()}
             style={{background:`${C.water}20`,border:`1px solid ${C.water}40`,
-              borderRadius:8,padding:'0 14px',color:C.water,fontSize:20,flexShrink:0,
-              cursor:'pointer'}}>📷</button>
+              borderRadius:8,padding:'0 14px',color:C.water,fontSize:20,
+              flexShrink:0,cursor:'pointer'}}>📷</button>
         </div>
-        {scanErr&&<div style={{fontSize:11,color:C.danger,marginBottom:8,padding:'6px 10px',background:`${C.danger}14`,borderRadius:6}}>{scanErr}</div>}
-        {srching&&<div style={{fontSize:11,color:C.muted,marginBottom:6}}>Suche online…</div>}
-        <div style={{maxHeight:260,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
+        {scanErr&&<div style={{fontSize:11,color:C.danger,marginBottom:8,padding:'6px 10px',
+          background:`${C.danger}14`,borderRadius:6}}>{scanErr}</div>}
+        {loading&&<div style={{fontSize:11,color:C.muted,marginBottom:6}}>Suche online…</div>}
+        <div style={{maxHeight:240,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
           {results.map(r=>(
-            <button key={(r.code||'')+r.name} onClick={()=>selectProduct(r)}
+            <button key={(r.code||'')+r.name} onClick={()=>pickProduct(r)}
               style={{width:'100%',background:C.cardAlt,border:`1px solid ${C.border}`,
                 borderRadius:8,padding:'10px 12px',textAlign:'left',marginBottom:5,display:'block',cursor:'pointer'}}>
               <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',
                 textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
               <div style={{display:'flex',justifyContent:'space-between',marginTop:2}}>
                 <span style={{fontSize:11,color:C.muted}}>{r.brand||'—'}</span>
-                {r.kcal>0&&<span style={{fontSize:11,color:C.accent,fontWeight:500}}>{r.kcal} kcal/100{r.isLiq?'ml':'g'}</span>}
+                {r.kcal>0&&<span style={{fontSize:11,color:C.accent,fontWeight:500}}>
+                  {r.kcal} kcal/100{r.isLiq?'ml':'g'}</span>}
               </div>
             </button>
           ))}
         </div>
-        {searchQ.length>0&&results.length===0&&!srching&&(
-          <div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'12px 0'}}>Keine Treffer</div>
-        )}
+        {searchQ.length>0&&results.length===0&&!loading&&(
+          <div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'12px 0'}}>Keine Treffer</div>)}
         {searchQ.length===0&&(
           <div style={{fontSize:11,color:C.faint,textAlign:'center',padding:'10px 0',lineHeight:1.8}}>
-            Produktname tippen oder Barcode fotografieren
-          </div>
-        )}
+            Produktname tippen oder Barcode fotografieren</div>)}
       </>:<>
-        {/* Produkt ausgewählt → Menge eingeben */}
         <div style={{...ST.card,marginBottom:12,background:C.cardAlt,padding:'12px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
             <div style={{flex:1,minWidth:0,paddingRight:8}}>
-              <div style={{fontSize:14,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selProd.name}</div>
+              <div style={{fontSize:14,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',
+                whiteSpace:'nowrap'}}>{selProd.name}</div>
               {selProd.brand&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{selProd.brand}</div>}
             </div>
             <button onClick={()=>{setSel(null);setSQ('');setRes([]);setScanE('');}}
-              style={{background:'none',border:'none',color:C.muted,fontSize:20,padding:0,cursor:'pointer',flexShrink:0}}>✕</button>
+              style={{background:'none',border:'none',color:C.muted,fontSize:20,padding:0,
+                cursor:'pointer',flexShrink:0}}>✕</button>
           </div>
         </div>
-
         <label style={ST.lbl}>Menge</label>
         <div style={{display:'flex',gap:8,marginBottom:8}}>
           <input style={{...ST.inp,marginBottom:0,flex:1}} type="number" inputMode="numeric"
@@ -772,7 +800,8 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
             {['g','ml'].map(u=>(
               <button key={u} onClick={()=>setUnit(u)}
                 style={{padding:'0 14px',background:unit===u?`${C.water}20`:'transparent',
-                  color:unit===u?C.water:C.muted,border:'none',fontSize:13,fontWeight:unit===u?600:400,cursor:'pointer'}}>{u}</button>
+                  color:unit===u?C.water:C.muted,border:'none',fontSize:13,
+                  fontWeight:unit===u?600:400,cursor:'pointer'}}>{u}</button>
             ))}
           </div>
         </div>
@@ -785,24 +814,13 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
                 color:+qty===q?C.water:C.muted}}>{q}{unit}</button>
           ))}
         </div>
-
-        {macros&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:14}}>
-          {[['Kalorien',macros.kcal,'kcal',C.accent],['Eiweiß',macros.protein,'g',C.sport],
-            ['Kohlenhydrate',macros.carbs,'g',C.water],['Fett',macros.fat,'g',C.mood]
-          ].map(([l,v,u2,col])=>(
-            <div key={l} style={{background:'#0A0806',borderRadius:8,padding:'8px 10px'}}>
-              <div style={{fontSize:9,color:C.muted,letterSpacing:0.6,textTransform:'uppercase',marginBottom:2}}>{l}</div>
-              <div style={{fontSize:18,fontWeight:600,color:col,lineHeight:1}}>{v}</div>
-              <div style={{fontSize:10,color:C.muted}}>{u2}</div>
-            </div>
-          ))}
-        </div>}
+        {N && <NutriTable n={N}/>}
         {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
         <button style={ST.btn(C.water)} onClick={saveProduct}>Eintragen</button>
       </>}
     </>}
 
-    {/* ── TAB: WASSER ── */}
+    {/* ── WASSER ── */}
     {tab==='wasser'&&<>
       <label style={ST.lbl}>Wasser (ml)</label>
       <input style={ST.inp} type="number" inputMode="numeric" placeholder="0"
@@ -820,7 +838,7 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
       <input type="range" min="1" max="5" value={mealQ}
         onChange={e=>setMQ(+e.target.value)} style={ST.sld(C.water)}/>
       <label style={ST.lbl}>Kalorien (optional)</label>
-      <input style={ST.inp} type="number" inputMode="numeric" placeholder="2000"
+      <input style={ST.inp} type="number" inputMode="numeric" placeholder="optional"
         value={cal} onChange={e=>setCal(e.target.value)}/>
       <label style={ST.lbl}>Notiz</label>
       <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setNote(e.target.value)}/>
@@ -828,21 +846,25 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
       <button style={ST.btn(C.water)} onClick={saveWasser}>Speichern</button>
     </>}
 
-    {/* ── TAB: MANUELL ── */}
+    {/* ── MANUELL ── */}
     {tab==='manuell'&&<>
       <label style={ST.lbl}>Produktname</label>
-      <input style={ST.inp} placeholder="z.B. Hausgemachte Pizza" value={mName} onChange={e=>setMN(e.target.value)}/>
+      <input style={ST.inp} placeholder="z.B. Hausgemachte Pizza"
+        value={mName} onChange={e=>setMN(e.target.value)}/>
+      <div style={{fontSize:10,color:C.muted,letterSpacing:0.7,marginBottom:10}}>Alle Werte pro 100g / 100ml</div>
       <div style={ST.grid2}>
-        <div><label style={ST.lbl}>kcal / 100g</label>
-          <input style={ST.inp} type="number" inputMode="decimal" placeholder="250" value={mKcal} onChange={e=>setMK(e.target.value)}/></div>
-        <div><label style={ST.lbl}>Eiweiß (g)</label>
-          <input style={ST.inp} type="number" inputMode="decimal" placeholder="5.0" value={mProt} onChange={e=>setMP(e.target.value)}/></div>
-        <div><label style={ST.lbl}>Kohlenhydrate (g)</label>
-          <input style={ST.inp} type="number" inputMode="decimal" placeholder="30.0" value={mCarb} onChange={e=>setMC(e.target.value)}/></div>
-        <div><label style={ST.lbl}>Fett (g)</label>
-          <input style={ST.inp} type="number" inputMode="decimal" placeholder="8.0" value={mFat} onChange={e=>setMF(e.target.value)}/></div>
+        {[['kcal / 100g',mKcal,setMK,'250'],['Eiweiß (g)',mProt,setMP,'12'],
+          ['Kohlenhydrate (g)',mCarb,setMC,'30'],['davon Zucker (g)',mSugar,setMSu,'5'],
+          ['Fett (g)',mFat,setMF,'8'],['ges. Fettsäuren (g)',mSatFat,setMSF,'2'],
+          ['Ballaststoffe (g)',mFiber,setMFi,'3'],['Salz (g)',mSalt,setMSa,'0.5'],
+        ].map(([l,v,fn,ph])=>(
+          <div key={l}>
+            <label style={ST.lbl}>{l}</label>
+            <input style={ST.inp} type="number" inputMode="decimal" placeholder={ph}
+              value={v} onChange={e=>fn(e.target.value)}/>
+          </div>
+        ))}
       </div>
-      <div style={{fontSize:11,color:C.faint,marginTop:-6,marginBottom:14}}>Pro 100g / 100ml</div>
       <label style={ST.lbl}>Menge</label>
       <div style={{display:'flex',gap:8,marginBottom:14}}>
         <input style={{...ST.inp,marginBottom:0,flex:1}} type="number" inputMode="numeric"
@@ -851,7 +873,8 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
           {['g','ml'].map(u=>(
             <button key={u} onClick={()=>setMU(u)}
               style={{padding:'0 14px',background:mUnit===u?`${C.water}20`:'transparent',
-                color:mUnit===u?C.water:C.muted,border:'none',fontSize:13,fontWeight:mUnit===u?600:400,cursor:'pointer'}}>{u}</button>
+                color:mUnit===u?C.water:C.muted,border:'none',fontSize:13,
+                fontWeight:mUnit===u?600:400,cursor:'pointer'}}>{u}</button>
           ))}
         </div>
       </div>
@@ -2748,13 +2771,27 @@ function App() {
             {d.mealTag&&<span style={{...ST.pill(C.water),fontSize:10}}>{d.mealTag}</span>}
             {d.quantity&&<span style={{fontSize:11,color:C.muted}}>{d.quantity} {d.unit}</span>}
           </div>
-          <Grid items={[
-            ['Kalorien', d.calories?(d.calories+' kcal'):null, C.accent],
-            ['Eiweiß',   d.protein ?(d.protein+' g'):null,     C.sport],
-            ['Kohlenhydrate',d.carbs?(d.carbs+' g'):null,      C.water],
-            ['Fett',     d.fat     ?(d.fat+' g'):null,          C.mood],
-            d.water>0?['Wasser',d.water+' ml',C.water]:null,
-          ]}/>
+          <div style={{borderRadius:8,overflow:'hidden',border:`1px solid ${C.border}`}}>
+            {[
+              ['Kalorien',      d.calories?(d.calories+' kcal'):null, C.accent, true],
+              ['Eiweiß',        d.protein ?(d.protein+' g'):null,     C.sport,  true],
+              ['Kohlenhydrate', d.carbs   ?(d.carbs+' g'):null,       C.water,  true],
+              d.sugar >0?['  davon Zucker',   d.sugar+' g',  C.muted,   false]:null,
+              ['Fett',          d.fat     ?(d.fat+' g'):null,         C.mood,   true],
+              d.satFat>0?['  ges. Fettsäuren',d.satFat+' g', C.muted,   false]:null,
+              d.fiber >0?['Ballaststoffe',    d.fiber+' g',  C.success, true]:null,
+              d.salt  >0?['Salz',             d.salt+' g',   C.muted,   true]:null,
+              d.water >0?['Wasser',           d.water+' ml', C.water,   true]:null,
+            ].filter(Boolean).map(([l,v,col,main],i,arr)=>v?(
+              <div key={l} style={{display:'flex',justifyContent:'space-between',
+                alignItems:'center',padding:`${main?8:5}px ${main?12:20}px`,
+                background:i%2===0?C.bg:C.card,
+                borderBottom:i<arr.length-1?`1px solid ${C.border}44`:'none'}}>
+                <span style={{fontSize:main?12:11,color:main?C.muted:C.faint}}>{l.trim()}</span>
+                <span style={{fontSize:main?14:12,fontWeight:main?600:400,color:col}}>{v}</span>
+              </div>
+            ):null)}
+          </div>
           {d.note&&<div style={{fontSize:11,color:C.muted,marginTop:8}}>{d.note}</div>}
         </>);
         case 'schlaf': return(<>
@@ -3054,7 +3091,7 @@ function App() {
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>{entries.length} Einträge · lokal gespeichert</span>
-          <span style={{color:C.faint}}>v4.0</span>
+          <span style={{color:C.faint}}>v4.1</span>
         </div>
       </header>
 
