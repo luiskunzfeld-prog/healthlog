@@ -75,6 +75,7 @@ let C = {
   sleep:'#8A7E96', steps:'#7A9080', text:'#EAE0D0', muted:'#6A6058', faint:'#3A3028',
   danger:'#B87060', success:'#7A9A7A',
   heart:'#D07878', bp:'#9A6890', mass:'#6890A0',
+  zyklus:'#C87A9A',
 };
 
 // ── Akzentfarben-Presets ──────────────────────────────────────────────────────
@@ -90,15 +91,16 @@ const ACCENT_PRESETS = [
 ];
 
 const METRICS = {
-  gewicht:    { label:'Gewicht',   unit:'kg',      color:C.accent },
-  sport:      { label:'Sport',     unit:'min',     color:C.sport  },
-  stimmung:   { label:'Stimmung',  unit:'/10',     color:C.mood   },
-  ernaehrung: { label:'Ernährung', unit:'ml',      color:C.water  },
-  schlaf:     { label:'Schlaf',    unit:'Std',     color:C.sleep  },
-  schritte:    { label:'Schritte',    unit:'Schr.',   color:C.steps  },
-  herz:        { label:'Herzfrequenz', unit:'bpm',     color:C.heart  },
-  blutdruck:   { label:'Blutdruck',    unit:'mmHg',    color:C.bp     },
-  koerpermass: { label:'Körpermaße',   unit:'cm',      color:C.mass   },
+  gewicht:    { label:'Gewicht',   unit:'kg',      color:C.accent  },
+  sport:      { label:'Sport',     unit:'min',     color:C.sport   },
+  stimmung:   { label:'Stimmung',  unit:'/10',     color:C.mood    },
+  ernaehrung: { label:'Ernährung', unit:'ml',      color:C.water   },
+  schlaf:     { label:'Schlaf',    unit:'Std',     color:C.sleep   },
+  schritte:   { label:'Schritte',  unit:'Schr.',   color:C.steps   },
+  herz:       { label:'Herzfrequenz', unit:'bpm',  color:C.heart   },
+  blutdruck:  { label:'Blutdruck', unit:'mmHg',    color:C.bp      },
+  koerpermass:{ label:'Körpermaße',unit:'cm',      color:C.mass    },
+  zyklus:     { label:'Zyklus',    unit:'Phase',   color:C.zyklus  },
 };
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
@@ -1163,6 +1165,179 @@ function KoerpermassForm({ add, initialData, onSave, onClose }) {
   </>;
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ZYKLUS-TRACKING
+//
+// Datenstruktur je Tages-Eintrag (type: 'zyklus'):
+// {
+//   phase:       'menstruation'|'follikulaer'|'ovulation'|'luteal'|null
+//   blutung:     0–4  (0=keine, 1=leicht, 2=mittel, 3=stark, 4=sehr stark)
+//   bbt:         number|null     — Basaltemperatur °C
+//   lh_test:     'negativ'|'positiv'|null
+//   zervix:      'trocken'|'cremig'|'wässrig'|'spinnbar'|null
+//   symptome:    string[]        — aus ZYKLUS_SYMPTOME
+//   zyklusTag:   number|null     — berechneter Tag im aktuellen Zyklus
+//   note:        string
+//   quelle:      'manual'|'apple_health'|'google_fit'|'flo'|'clue'|'import'
+// }
+//
+// Sync-Quellen (Adapter-Architektur):
+//   Apple HealthKit → XML Export → parseApple() erweitert
+//   Google Health Connect → JSON Export → parseGoogleFit() erweitert
+//   Flo Health → CSV Export → parseFlo() (neu)
+//   Clue → CSV Export → parseClue() (neu)
+//   Manuell → ZyklusForm
+// ══════════════════════════════════════════════════════════════════════════════
+
+const ZYKLUS_PHASEN = [
+  { id:'menstruation', label:'Menstruation', color:'#C87A9A', icon:'🩸' },
+  { id:'follikulaer',  label:'Follikulär',   color:'#D4A86A', icon:'🌱' },
+  { id:'ovulation',    label:'Ovulation',    color:'#7AB48A', icon:'⭐' },
+  { id:'luteal',       label:'Luteal',       color:'#9A8AB4', icon:'🌙' },
+];
+
+const ZYKLUS_BLUTUNG = ['Keine','Leicht','Mittel','Stark','Sehr stark'];
+
+const ZYKLUS_SYMPTOME = [
+  'Krämpfe','Kopfschmerzen','Rückenschmerzen','Übelkeit',
+  'Müdigkeit','Blähungen','Brustschmerzen','Akne',
+  'Stimmungsschwankungen','Heißhunger','Schlafprobleme','Schwindel',
+];
+
+const ZYKLUS_ZERVIX = ['Trocken','Cremig','Wässrig','Spinnbar'];
+
+// Berechnet Zyklustag anhand vergangener Einträge
+function berechneZyklusTag(entries, datum) {
+  const zyklusEs = entries
+    .filter(e => e.type === 'zyklus' && e.data.blutung > 0 && e.date <= datum)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  if (!zyklusEs.length) return null;
+  // Letzter Blutungsbeginn suchen
+  let letzterBeginn = null;
+  for (let i = 0; i < zyklusEs.length; i++) {
+    const e = zyklusEs[i];
+    // Ist dies Zyklusstart? → Kein Blutungseintrag am Vortag
+    const vortagStr = new Date(new Date(e.date+'T12:00:00').getTime() - 864e5).toISOString().slice(0,10);
+    const hatVortag = zyklusEs.some(x => x.date === vortagStr && x.data.blutung > 0);
+    if (!hatVortag) { letzterBeginn = e.date; break; }
+  }
+  if (!letzterBeginn) return null;
+  const diff = Math.round((new Date(datum+'T12:00:00') - new Date(letzterBeginn+'T12:00:00')) / 864e5);
+  return diff + 1;
+}
+
+function ZyklusForm({ add, entries, initialData, onSave, onClose }) {
+  const init = initialData?.data || {};
+  const [phase,   setPhase]   = useState(init.phase   || null);
+  const [blutung, setBlutung] = useState(init.blutung ?? 0);
+  const [bbt,     setBBT]     = useState(init.bbt     != null ? String(init.bbt) : '');
+  const [lhTest,  setLH]      = useState(init.lh_test || null);
+  const [zervix,  setZervix]  = useState(init.zervix  || null);
+  const [symptome,setSym]     = useState(init.symptome || []);
+  const [note,    setNote]    = useState(init.note     || '');
+  const [date,    setDate]    = useState(toDay());
+
+  const toggleSym = (s) => setSym(prev =>
+    prev.includes(s) ? prev.filter(x=>x!==s) : [...prev, s]
+  );
+
+  const save = () => {
+    const zyklusTag = berechneZyklusTag(entries||[], date);
+    const d = {
+      phase, blutung, bbt: bbt ? +bbt : null,
+      lh_test: lhTest, zervix, symptome, zyklusTag,
+      note, quelle: 'manual',
+    };
+    onSave ? onSave(d) : add('zyklus', d, date);
+  };
+
+  return <>
+    {!initialData && <DatePickerField value={date} onChange={setDate}/>}
+
+    {/* Phase */}
+    <label style={ST.lbl}>Phase</label>
+    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
+      {ZYKLUS_PHASEN.map(p=>(
+        <button key={p.id} onClick={()=>setPhase(phase===p.id?null:p.id)}
+          style={{padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer',fontFamily:'inherit',
+            border:`1px solid ${phase===p.id?p.color:C.border}`,
+            background:phase===p.id?`${p.color}20`:'transparent',
+            color:phase===p.id?p.color:C.muted}}>
+          {p.icon} {p.label}
+        </button>
+      ))}
+    </div>
+
+    {/* Blutungsstärke */}
+    <label style={ST.lbl}>Blutungsstärke</label>
+    <div style={{display:'flex',gap:5,marginBottom:14,flexWrap:'wrap'}}>
+      {ZYKLUS_BLUTUNG.map((l,i)=>(
+        <button key={i} onClick={()=>setBlutung(i)}
+          style={{padding:'5px 11px',borderRadius:6,fontSize:12,cursor:'pointer',fontFamily:'inherit',
+            border:`1px solid ${blutung===i?C.zyklus:C.border}`,
+            background:blutung===i?`${C.zyklus}20`:'transparent',
+            color:blutung===i?C.zyklus:C.muted}}>
+          {l}
+        </button>
+      ))}
+    </div>
+
+    {/* Basaltemperatur */}
+    <label style={ST.lbl}>Basaltemperatur (°C) — optional</label>
+    <input style={ST.inp} type="number" step="0.01" inputMode="decimal"
+      placeholder="36.5" value={bbt}
+      onChange={e=>setBBT(e.target.value)}/>
+
+    {/* LH-Test */}
+    <label style={ST.lbl}>Ovulations­test (LH) — optional</label>
+    <div style={{display:'flex',gap:6,marginBottom:14}}>
+      {[['negativ','–'],['positiv','+ LH-Peak']].map(([v,l])=>(
+        <button key={v} onClick={()=>setLH(lhTest===v?null:v)}
+          style={{padding:'6px 14px',borderRadius:8,fontSize:12,cursor:'pointer',fontFamily:'inherit',
+            border:`1px solid ${lhTest===v?(v==='positiv'?C.success:C.muted):C.border}`,
+            background:lhTest===v?(v==='positiv'?`${C.success}18`:`${C.faint}`):'transparent',
+            color:lhTest===v?(v==='positiv'?C.success:C.text):C.muted}}>
+          {l}
+        </button>
+      ))}
+    </div>
+
+    {/* Zervixschleim */}
+    <label style={ST.lbl}>Zervixschleim — optional</label>
+    <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:14}}>
+      {ZYKLUS_ZERVIX.map(z=>(
+        <button key={z} onClick={()=>setZervix(zervix===z?null:z)}
+          style={{padding:'5px 11px',borderRadius:6,fontSize:12,cursor:'pointer',fontFamily:'inherit',
+            border:`1px solid ${zervix===z?C.water:C.border}`,
+            background:zervix===z?`${C.water}18`:'transparent',
+            color:zervix===z?C.water:C.muted}}>
+          {z}
+        </button>
+      ))}
+    </div>
+
+    {/* Symptome */}
+    <label style={ST.lbl}>Symptome</label>
+    <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:14}}>
+      {ZYKLUS_SYMPTOME.map(s=>(
+        <button key={s} onClick={()=>toggleSym(s)}
+          style={{padding:'5px 10px',borderRadius:6,fontSize:11,cursor:'pointer',fontFamily:'inherit',
+            border:`1px solid ${symptome.includes(s)?C.zyklus:C.border}`,
+            background:symptome.includes(s)?`${C.zyklus}18`:'transparent',
+            color:symptome.includes(s)?C.zyklus:C.muted}}>
+          {s}
+        </button>
+      ))}
+    </div>
+
+    <label style={ST.lbl}>Notiz</label>
+    <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setNote(e.target.value)}/>
+
+    {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
+    <button style={ST.btn(C.zyklus)} onClick={save}>Speichern</button>
+  </>;
+}
+
 // ── Barcode-Erkennung: BarcodeDetector → ZXing BrowserMultiFormatReader ────
 async function detectFromImage(imageEl) {
   // Methode 1: native BarcodeDetector (iOS 17+, Android Chrome, Samsung)
@@ -1613,6 +1788,12 @@ function preview(e) {
   if(e.type==='koerpermass') { const parts=[]; if(d.taille)parts.push('Taille '+d.taille+'cm'); if(d.hufte)parts.push('Hüfte '+d.hufte+'cm'); if(d.whr)parts.push('WHR '+d.whr); return parts.join('  ·  ')||'Maße eingetragen'; }
   if(e.type==='schlaf')     return `${d.hours} Std  ·  Qualität ${d.quality}/5`;
   if(e.type==='schritte')   return `${d.steps.toLocaleString('de-DE')} Schritte`;
+  if(e.type==='zyklus') {
+    const ph=ZYKLUS_PHASEN.find(p=>p.id===d.phase);
+    const bl=d.blutung>0?`  ·  Blutung: ${ZYKLUS_BLUTUNG[d.blutung]}`:'';
+    const sym=d.symptome?.length?`  ·  ${d.symptome.slice(0,2).join(', ')}`:'';
+    return `${ph?ph.icon+' '+ph.label:'Kein Phase'}${bl}${sym}`;
+  }
   return '';
 }
 
@@ -1641,6 +1822,10 @@ function HealthImport({ onImport, settings }) {
       if (rawText.trim().startsWith('{')) { try { const j=JSON.parse(rawText); if (j.date&&j.weight) return 'fitbit-weight'; } catch{} }
       if (rawText.includes('Date,Calories') || rawText.includes('Food Name,Calories')) return 'mfp';
       if (rawText.includes('Date,Steps') || rawText.includes('date,steps')) return 'csv-steps';
+      // Flo: hat "Menstruation" oder "Cycle_phase" Spalte
+      if (rawText.toLowerCase().includes('menstruation') && rawText.toLowerCase().includes('cramps')) return 'flo';
+      // Clue: hat "Bleeding" oder "Tender_breasts" Spalte
+      if (rawText.toLowerCase().includes('bleeding') && (rawText.toLowerCase().includes('tender') || rawText.toLowerCase().includes('fluid'))) return 'clue';
     }
     return 'unknown';
   };
@@ -1709,7 +1894,74 @@ function HealthImport({ onImport, settings }) {
         data:{steps,note:'Apple Health'}});
       sc++;
     });
-    return {source:'Apple Health',gw,sp,sl,sc,fat};
+
+    // ── Zyklus-Daten aus Apple HealthKit ─────────────────────────────────────
+    // Apple HealthKit Mapping:
+    //   HKCategoryTypeIdentifierMenstrualFlow    → blutung (1=unspec, 2=leicht, 3=mittel, 4=stark)
+    //   HKCategoryTypeIdentifierOvulationTestResult → lh_test
+    //   HKCategoryTypeIdentifierCervicalMucusQuality → zervix
+    //   HKQuantityTypeIdentifierBasalBodyTemperature → bbt (°C)
+    //   HKCategoryTypeIdentifierIntermenstrualBleeding → Zwischenblutung (phase=luteal,blutung=1)
+    let zk=0;
+    const zyklusMap = {}; // date → partial entry data
+    const ensureZyklus = (date) => {
+      if (!zyklusMap[date]) zyklusMap[date] = {
+        phase:null, blutung:0, bbt:null, lh_test:null,
+        zervix:null, symptome:[], zyklusTag:null, note:'Apple Health', quelle:'apple_health',
+      };
+      return zyklusMap[date];
+    };
+    // Menstruationsfluss
+    const hkFlowMap={1:0,2:1,3:2,4:3}; // HK value (1=unspec,2=leicht,3=mittel,4=stark) → blutung (0-4)
+    doc.querySelectorAll('Record[type="HKCategoryTypeIdentifierMenstrualFlow"]').forEach(r=>{
+      try {
+        const date=r.getAttribute('startDate')?.slice(0,10); if(!date) return;
+        const val=parseInt(r.getAttribute('value')||'1');
+        const z=ensureZyklus(date);
+        z.blutung = hkFlowMap[val] ?? 1;
+        z.phase   = 'menstruation';
+      } catch(e){ errors.push('Zyklus Menstruation: '+e.message); }
+    });
+    // Ovulationstest
+    doc.querySelectorAll('Record[type="HKCategoryTypeIdentifierOvulationTestResult"]').forEach(r=>{
+      try {
+        const date=r.getAttribute('startDate')?.slice(0,10); if(!date) return;
+        const val=r.getAttribute('value')||'';
+        ensureZyklus(date).lh_test = val.includes('Positive')||val==='2' ? 'positiv' : 'negativ';
+      } catch(e){ errors.push('Zyklus LH-Test: '+e.message); }
+    });
+    // Zervixschleim
+    const hkZervixMap={'1':'Trocken','2':'Cremig','3':'Wässrig','4':'Spinnbar'};
+    doc.querySelectorAll('Record[type="HKCategoryTypeIdentifierCervicalMucusQuality"]').forEach(r=>{
+      try {
+        const date=r.getAttribute('startDate')?.slice(0,10); if(!date) return;
+        const val=r.getAttribute('value')||'';
+        ensureZyklus(date).zervix = hkZervixMap[val] || null;
+      } catch(e){ errors.push('Zyklus Zervix: '+e.message); }
+    });
+    // Basaltemperatur
+    doc.querySelectorAll('Record[type="HKQuantityTypeIdentifierBasalBodyTemperature"]').forEach(r=>{
+      try {
+        const date=r.getAttribute('startDate')?.slice(0,10); if(!date) return;
+        const val=parseFloat(r.getAttribute('value'));
+        if(!isNaN(val)) ensureZyklus(date).bbt = +val.toFixed(2);
+      } catch(e){ errors.push('Zyklus BBT: '+e.message); }
+    });
+    // Zwischenblutungen
+    doc.querySelectorAll('Record[type="HKCategoryTypeIdentifierIntermenstrualBleeding"]').forEach(r=>{
+      try {
+        const date=r.getAttribute('startDate')?.slice(0,10); if(!date) return;
+        const z=ensureZyklus(date);
+        if(!z.blutung) { z.blutung=1; z.phase='luteal'; }
+      } catch(e){}
+    });
+    // Alle Zyklus-Tage als Einträge pushen
+    Object.entries(zyklusMap).forEach(([date,data])=>{
+      entries.push({id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'zyklus',data});
+      zk++;
+    });
+
+    return {source:'Apple Health',gw,sp,sl,sc,fat,zk};
   };
 
   // ── Google Fit JSON Parser ────────────────────────────────────────────────
@@ -1851,6 +2103,148 @@ function HealthImport({ onImport, settings }) {
     return {source:'Fitbit',gw,sp,sl,sc};
   };
 
+  // ── Flo Health CSV Parser ─────────────────────────────────────────────────
+  // Flo Export: Einstellungen → Daten verwalten → Daten exportieren → CSV
+  // Spalten: Date, Menstruation, Cramps_intensity, Mood, Headache, Water_retention, ...
+  // ─────────────────────────────────────────────────────────────────────────
+  // Adapter-Mapping: Flo CSV → HealthLog ZyklusEntry
+  // ─────────────────────────────────────────────────────────────────────────
+  const parseFlo = (rawText, entries, errors) => {
+    let zk=0;
+    const csvParse = (text) => {
+      const lines=text.split('\n').filter(l=>l.trim());
+      if(lines.length<2) return [];
+      // Flo nutzt Semicolon oder Komma als Trennzeichen
+      const sep=lines[0].includes(';')?';':',';
+      const hdr=lines[0].split(sep).map(h=>h.trim().replace(/"/g,'').toLowerCase().replace(/\s+/g,'_'));
+      return lines.slice(1).map(l=>{ const v=l.split(sep);const o={};hdr.forEach((h,i)=>o[h]=(v[i]||'').trim().replace(/"/g,''));return o; });
+    };
+
+    // Flo Menstruation-Werte → blutung-Index
+    const floBlutungMap={'no_bleeding':0,'light':1,'medium':2,'heavy':3,'spotting':1,'very_heavy':4};
+    // Flo Phase-Werte → phase
+    const floPhaseMap={
+      'menstruation':'menstruation','period':'menstruation',
+      'follicular':'follikulaer','ovulation':'ovulation',
+      'luteal':'luteal','pms':'luteal',
+    };
+
+    const rows=csvParse(rawText);
+    rows.forEach(row=>{
+      try{
+        // Datum-Spalten: "date", "day", "start_date"
+        const rawDate=row.date||row.day||row.start_date||'';
+        const date=rawDate.slice(0,10);
+        if(!date.match(/^\d{4}-\d{2}-\d{2}$/)) return;
+
+        const blutungRaw=(row.menstruation||row.bleeding||row.period||'').toLowerCase().trim();
+        const phaseRaw  =(row.phase||row.cycle_phase||'').toLowerCase().trim();
+
+        const blutung = floBlutungMap[blutungRaw] ?? 0;
+        const phase   = floPhaseMap[phaseRaw]     || (blutung>0?'menstruation':null);
+
+        // Symptome extrahieren
+        const symptome=[];
+        if(row.cramps_intensity&&row.cramps_intensity!=='0'&&row.cramps_intensity.toLowerCase()!=='none') symptome.push('Krämpfe');
+        if(row.headache&&row.headache.toLowerCase()!=='no')    symptome.push('Kopfschmerzen');
+        if(row.backache&&row.backache.toLowerCase()!=='no')    symptome.push('Rückenschmerzen');
+        if(row.nausea&&row.nausea.toLowerCase()!=='no')        symptome.push('Übelkeit');
+        if(row.fatigue&&row.fatigue.toLowerCase()!=='no')      symptome.push('Müdigkeit');
+        if(row.bloating&&row.bloating.toLowerCase()!=='no')    symptome.push('Blähungen');
+        if(row.breast_tenderness&&row.breast_tenderness.toLowerCase()!=='no') symptome.push('Brustschmerzen');
+        if(row.acne&&row.acne.toLowerCase()!=='no')            symptome.push('Akne');
+        if(row.mood_swings&&row.mood_swings.toLowerCase()!=='no') symptome.push('Stimmungsschwankungen');
+        if(row.cravings&&row.cravings.toLowerCase()!=='no')    symptome.push('Heißhunger');
+
+        // Basaltemperatur
+        const bbtRaw=parseFloat(row.bbt||row.basal_temperature||row.temperature||'');
+        const bbt=!isNaN(bbtRaw)&&bbtRaw>30?+bbtRaw.toFixed(2):null;
+
+        // LH-Test
+        const lhRaw=(row.ovulation_test||row.lh_test||'').toLowerCase();
+        const lh_test=lhRaw.includes('posit')?'positiv':lhRaw.includes('negat')?'negativ':null;
+
+        // Nur speichern wenn irgendwas vorhanden
+        if(!blutung&&!phase&&!bbt&&!lh_test&&!symptome.length) return;
+
+        entries.push({
+          id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'zyklus',
+          data:{phase,blutung,bbt,lh_test,zervix:null,symptome,zyklusTag:null,
+            note:'Flo Import',quelle:'flo'},
+        });
+        zk++;
+      }catch(e){errors.push('Flo Zeile: '+e.message);}
+    });
+    return {source:'Flo Health',zk};
+  };
+
+  // ── Clue CSV Parser ───────────────────────────────────────────────────────
+  // Clue Export: Konto → Daten exportieren → CSV (pro Kategorie eine Datei)
+  // Typische Clue-Spalten: Date, Bleeding, Pain (Cramps), Mood, Energy, Sleep, ...
+  // ─────────────────────────────────────────────────────────────────────────
+  // Adapter-Mapping: Clue CSV → HealthLog ZyklusEntry
+  // ─────────────────────────────────────────────────────────────────────────
+  const parseClue = (rawText, entries, errors) => {
+    let zk=0;
+    const sep=rawText.includes(';')?';':',';
+    const lines=rawText.split('\n').filter(l=>l.trim());
+    if(lines.length<2) return {source:'Clue',zk:0};
+    const hdr=lines[0].split(sep).map(h=>h.trim().replace(/"/g,'').toLowerCase().replace(/\s+/g,'_'));
+
+    // Clue Blutungs-Mapping (value: light/medium/heavy/spotting)
+    const clueBlutung={'light':1,'spotting':1,'medium':2,'heavy':3,'very_heavy':4};
+    // Clue Phase-Mapping
+    const cluePhase={'menstruation':'menstruation','fertile_window':'follikulaer',
+      'ovulation':'ovulation','luteal':'luteal','pms':'luteal','period':'menstruation'};
+
+    lines.slice(1).forEach(line=>{
+      try{
+        const v=line.split(sep);
+        const row={};hdr.forEach((h,i)=>row[h]=(v[i]||'').trim().replace(/"/g,''));
+
+        const date=(row.date||row.day||'').slice(0,10);
+        if(!date.match(/^\d{4}-\d{2}-\d{2}$/)) return;
+
+        const blutungRaw=(row.bleeding||row.period||row.menstruation||'').toLowerCase().trim();
+        const blutung=clueBlutung[blutungRaw]??0;
+        const phaseRaw=(row.phase||row.cycle_phase||row.fertile||'').toLowerCase().trim();
+        const phase=cluePhase[phaseRaw]||(blutung>0?'menstruation':null);
+
+        // Symptome
+        const symptome=[];
+        const pain=row.pain||row.cramps||'';
+        if(pain&&pain.toLowerCase()!=='none'&&pain!=='0') symptome.push('Krämpfe');
+        if(row.headache&&row.headache.toLowerCase()!=='none') symptome.push('Kopfschmerzen');
+        if(row.backache&&row.backache.toLowerCase()!=='none') symptome.push('Rückenschmerzen');
+        if(row.nausea&&row.nausea.toLowerCase()!=='none')     symptome.push('Übelkeit');
+        if(row.fatigue&&row.fatigue.toLowerCase()!=='none')   symptome.push('Müdigkeit');
+        if(row.bloating&&row.bloating.toLowerCase()!=='none') symptome.push('Blähungen');
+        if(row.tender_breasts&&row.tender_breasts.toLowerCase()!=='none') symptome.push('Brustschmerzen');
+
+        // BBT
+        const bbtRaw=parseFloat(row.temperature||row.bbt||'');
+        const bbt=!isNaN(bbtRaw)&&bbtRaw>30?+bbtRaw.toFixed(2):null;
+        // LH
+        const lhRaw=(row.ovulation_test||row.lh||'').toLowerCase();
+        const lh_test=lhRaw.includes('pos')?'positiv':lhRaw.includes('neg')?'negativ':null;
+        // Zervix
+        const zervixRaw=(row.fluid||row.cervical_mucus||'').toLowerCase();
+        const zervixMap={'dry':'Trocken','creamy':'Cremig','watery':'Wässrig','egg_white':'Spinnbar','stretchy':'Spinnbar'};
+        const zervix=zervixMap[zervixRaw]||null;
+
+        if(!blutung&&!phase&&!bbt&&!lh_test&&!zervix&&!symptome.length) return;
+
+        entries.push({
+          id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type:'zyklus',
+          data:{phase,blutung,bbt,lh_test,zervix,symptome,zyklusTag:null,
+            note:'Clue Import',quelle:'clue'},
+        });
+        zk++;
+      }catch(e){errors.push('Clue Zeile: '+e.message);}
+    });
+    return {source:'Clue',zk};
+  };
+
   // ── MyFitnessPal CSV Parser ───────────────────────────────────────────────
   const parseMFP = (rawText, entries, errors) => {
     let food=0;
@@ -1947,6 +2341,10 @@ function HealthImport({ onImport, settings }) {
         stats=parseFitbit(zipFiles,rawText,entries,errors);
       } else if(format==='mfp'){
         stats=parseMFP(rawText||'',entries,errors);
+      } else if(format==='flo'){
+        stats=parseFlo(rawText||'',entries,errors);
+      } else if(format==='clue'){
+        stats=parseClue(rawText||'',entries,errors);
       } else if(format==='healthlog'||format==='json'){
         stats=parseHealthLogJSON(rawText||'',entries,errors);
       } else if(format==='csv-steps'||format==='csv'){
@@ -2002,6 +2400,8 @@ function HealthImport({ onImport, settings }) {
     {id:'mfp',      l:'MyFitnessPal'},
     {id:'json',     l:'HealthLog JSON'},
     {id:'csv',      l:'Eigene CSV'},
+    {id:'flo',      l:'Flo'},
+    {id:'clue',     l:'Clue'},
   ];
 
   const HINTS={
@@ -2013,10 +2413,13 @@ function HealthImport({ onImport, settings }) {
     mfp:'MyFitnessPal → Daten exportieren → diary.csv auswählen',
     json:'HealthLog → Daten → JSON Backup → Datei auswählen',
     csv:'CSV mit Spalten: date,steps oder date,weight',
+    flo:'Flo → Profil → Kontoeinstellungen → Daten exportieren → CSV auswählen',
+    clue:'Clue → Einstellungen → Daten exportieren → CSV-Datei auswählen',
   };
 
   const ACCEPT={auto:'.zip,.xml,.json,.csv',apple:'.zip,.xml',google:'.zip,.json',
-    samsung:'.zip',fitbit:'.zip,.json',mfp:'.csv',json:'.json',csv:'.csv'};
+    samsung:'.zip',fitbit:'.zip,.json',mfp:'.csv',json:'.json',csv:'.csv',
+    flo:'.csv',clue:'.csv'};
 
   return (
     <div style={ST.card}>
@@ -3122,6 +3525,7 @@ function App() {
   const herzE = useMemo(()=>filtered('herz'),[filtered]);
   const bpE   = useMemo(()=>filtered('blutdruck'),[filtered]);
   const massE = useMemo(()=>filtered('koerpermass'),[filtered]);
+  const zyklusE = useMemo(()=>filtered('zyklus').sort((a,b)=>a.date.localeCompare(b.date)),[filtered]);
 
   const exportXLSX = () => {
     const wb=XLSX.utils.book_new();
@@ -3338,6 +3742,7 @@ function App() {
             {activeForm==='herz'        && <HerzForm       add={add}/>}
             {activeForm==='blutdruck'   && <BlutdruckForm  add={add}/>}
             {activeForm==='koerpermass' && <KoerpermassForm add={add}/>}
+            {activeForm==='zyklus'      && <ZyklusForm add={add} entries={entries}/>}
           </div>
         : <div style={{...ST.card,padding:28,textAlign:'center',color:C.muted,fontSize:13}}>Kategorie oben auswählen</div>}
 
@@ -3410,6 +3815,7 @@ function App() {
       { id:'herz',      title:'Herzfrequenz (bpm)',          color:C.heart,   hasData:!!herzE.length },
       { id:'blutdruck', title:'Blutdruck (mmHg)',            color:C.bp,      hasData:!!bpE.length },
       { id:'koerper',   title:'Körpermaße (cm)',             color:C.mass,    hasData:!!massE.length },
+      { id:'zyklus',    title:'Zyklus & BBT',                color:C.zyklus,  hasData:!!zyklusE.length },
     ];
 
     const DEFAULT_ORDER = CHART_DEFS.map(d=>d.id);
@@ -3553,6 +3959,37 @@ function App() {
             </div>
           </CC>;
         })() : null;
+        case 'zyklus': {
+          if(!zyklusE.length) return null;
+          // Blutungs-Intensität als Balkendiagramm
+          const blutDs=[{label:'Blutung (0–4)',data:zyklusE.map(e=>e.data.blutung||0),color:col}];
+          // BBT als Linie (wenn vorhanden)
+          const hasBBT=zyklusE.some(e=>e.data.bbt);
+          const bbtDs=hasBBT?[{label:'BBT (°C)',data:zyklusE.map(e=>e.data.bbt||null),color:'#D4A86A',dashed:false}]:[];
+          // Phasen-Legende
+          const phasenHeute=ZYKLUS_PHASEN.filter(p=>zyklusE.some(e=>e.data.phase===p.id));
+          const letzterEintrag=zyklusE.at(-1);
+          const zyklusTag=letzterEintrag?.data.zyklusTag;
+          const stat=zyklusTag?`Tag ${zyklusTag}`:(letzterEintrag?.data.phase?ZYKLUS_PHASEN.find(p=>p.id===letzterEintrag.data.phase)?.label:null);
+          return <CC key="zyklus" title="Zyklus & Basaltemperatur" color={col} empty={false}
+            stat={stat||null} avgVal={null}>
+            <CJSChart type={cType||'bar'} height={170} yMin={0} yMax={4}
+              labels={zyklusE.map(e=>fmtD(e.date))}
+              datasets={hasBBT?[...blutDs,...bbtDs]:blutDs}/>
+            {hasBBT&&<div style={{display:'flex',gap:14,marginTop:8,fontSize:11}}>
+              <span style={{color:col}}>■ Blutung (0–4)</span>
+              <span style={{color:'#D4A86A'}}>— BBT (°C)</span>
+            </div>}
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:10}}>
+              {ZYKLUS_PHASEN.map(p=>(
+                <span key={p.id} style={{fontSize:10,padding:'2px 8px',borderRadius:10,
+                  background:`${p.color}20`,color:p.color}}>
+                  {p.icon} {p.label}
+                </span>
+              ))}
+            </div>
+          </CC>;
+        }
         default: return null;
       }
     };
@@ -3941,7 +4378,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v5.3</span>
+          <span>v5.4</span>
         </div>
       </header>
 
@@ -3974,6 +4411,7 @@ function App() {
             {editing.type==='herz'        && <HerzForm       add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
             {editing.type==='blutdruck'   && <BlutdruckForm  add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
             {editing.type==='koerpermass' && <KoerpermassForm add={add}                    initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/> }
+            {editing.type==='zyklus'      && <ZyklusForm add={add} entries={entries}        initialData={editing}      onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
           </div>
         </div>
       )}
@@ -4006,6 +4444,7 @@ function App() {
             {journalAdd.type==='herz'       && <HerzForm       add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/>}
             {journalAdd.type==='blutdruck'  && <BlutdruckForm  add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/>}
             {journalAdd.type==='koerpermass'&& <KoerpermassForm add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/>}
+            {journalAdd.type==='zyklus'     && <ZyklusForm add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} entries={entries} onSave={null} onClose={()=>setJournalAdd(null)}/>}
           </div>
         </div>
       )}
