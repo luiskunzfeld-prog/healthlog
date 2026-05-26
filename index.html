@@ -1120,6 +1120,418 @@ function CorrelationMatrix({ correlations }) {
   );
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// TIPP-SYSTEM — Modulares Verhaltens-Coaching
+//
+// Architektur:
+//   TIPS_DB        — zentrales Tipp-Verzeichnis (leicht erweiterbar)
+//   useTip(cat)    — Hook: wählt den Tages-Tipp nach Kategorie
+//   TipBanner      — kollabierbare Inline-Tipp-Leiste (in Formularen)
+//   TipTooltip     — (?) Icon-Tooltip für Feldebene
+//   DailyTipCard   — Dashboard-Karte (täglich wechselnd)
+//
+// Tipp-Format:
+//   id         — eindeutig, persistent für Dismiss-Tracking
+//   category   — Metrik-Schlüssel oder 'general'
+//   icon       — Emoji
+//   title      — kurze Überschrift (≤ 8 Wörter)
+//   body       — Erklärung (1–2 Sätze)
+//   priority   — 1=hoch (erscheint zuerst), 2=mittel, 3=info
+//   condition? — optionale Funktion (entries, settings) → bool
+//                nur anzeigen wenn Bedingung erfüllt
+// ══════════════════════════════════════════════════════════════════════════════
+
+const TIPS_DB = [
+  // ── Gewicht ─────────────────────────────────────────────────────────────────
+  { id:'gew_01', category:'gewicht', priority:1, icon:'⏰',
+    title:'Gleicher Zeitpunkt, verlässliche Werte',
+    body:'Wiege dich täglich morgens nüchtern, nach dem Aufstehen und nach dem ersten Gang zur Toilette — vor dem Frühstück. Nur so sind deine Werte wirklich vergleichbar.' },
+  { id:'gew_02', category:'gewicht', priority:2, icon:'📉',
+    title:'Tägliche Schwankungen sind normal',
+    body:'Das Gewicht schwankt natürlich um ±1–2 kg pro Tag (Wasser, Verdauung, Hormonschwankungen). Bewerte immer den 7-Tage-Trend — nicht den Tageswert.' },
+  { id:'gew_03', category:'gewicht', priority:2, icon:'👗',
+    title:'Gleiches Outfit, gleiche Genauigkeit',
+    body:'Wiege dich möglichst immer in der gleichen Kleidung (oder ohne). Kleidung kann 0,5–1,5 kg zum Ergebnis beitragen.' },
+  { id:'gew_04', category:'gewicht', priority:3, icon:'🦴',
+    title:'BMI ist ein grober Richtwert',
+    body:'Der BMI berücksichtigt weder Muskelmasse noch Körperzusammensetzung. Kombiniere ihn mit Körpermaßen (Taille/Hüfte) für ein vollständigeres Bild.' },
+
+  // ── Ernährung ────────────────────────────────────────────────────────────────
+  { id:'ern_01', category:'ernaehrung', priority:1, icon:'🥗',
+    title:'Teller-Methode für ausgewogene Mahlzeiten',
+    body:'Halbiere deinen Teller gedanklich: eine Hälfte Gemüse/Salat, ein Viertel Protein, ein Viertel komplexe Kohlenhydrate — einfach, aber effektiv.' },
+  { id:'ern_02', category:'ernaehrung', priority:1, icon:'💧',
+    title:'Hunger vs. Durst unterscheiden',
+    body:'Trink vor dem Essen ein Glas Wasser. Hunger und Durst werden oft verwechselt — 15 Minuten warten zeigt, ob es wirklicher Hunger ist.' },
+  { id:'ern_03', category:'ernaehrung', priority:2, icon:'🕐',
+    title:'Mahlzeiten regelmäßig einhalten',
+    body:'3–5 Mahlzeiten in regelmäßigen Abständen stabilisieren den Blutzucker und reduzieren Heißhungerattacken deutlich effektiver als unregelmäßiges Essen.' },
+  { id:'ern_04', category:'ernaehrung', priority:2, icon:'🔍',
+    title:'Verarbeitungsgrad im Blick behalten',
+    body:'Ultra-verarbeitete Lebensmittel (NOVA 4) enthalten oft versteckten Zucker, Salz und ungesunde Fette. Frische Zutaten sind immer die bessere Wahl.' },
+  { id:'ern_05', category:'ernaehrung', priority:3, icon:'🍽️',
+    title:'Langsamer essen, besser sättigen',
+    body:'Das Sättigungsgefühl braucht 15–20 Minuten, um das Gehirn zu erreichen. Wer langsamer kaut, isst automatisch weniger und genießt mehr.' },
+  { id:'ern_06', category:'ernaehrung', priority:3, icon:'🌈',
+    title:'Farbe auf dem Teller = Mikronährstoffe',
+    body:'Je bunter dein Teller, desto mehr verschiedene Vitamine und Antioxidantien. Versuche täglich 5 verschiedene Farben von Gemüse und Obst.' },
+
+  // ── Schlaf ───────────────────────────────────────────────────────────────────
+  { id:'sl_01', category:'schlaf', priority:1, icon:'🌙',
+    title:'Konstante Schlafzeiten sind entscheidend',
+    body:'Geh jeden Tag — auch am Wochenende — zur gleichen Zeit schlafen und aufstehen. Das reguliert deine innere Uhr stärker als die Schlafdauer.' },
+  { id:'sl_02', category:'schlaf', priority:1, icon:'📱',
+    title:'Bildschirm-Pause 60 Minuten vorher',
+    body:'Blaues Licht von Smartphones und Monitoren unterdrückt Melatonin. Verzichte 60 Minuten vor dem Schlafen auf Bildschirme für messbar besseren Schlaf.' },
+  { id:'sl_03', category:'schlaf', priority:2, icon:'🌡️',
+    title:'Kühles Zimmer, tiefer Schlaf',
+    body:'Das Schlafzimmer sollte 16–18°C kühl sein. Der Körper senkt im Schlaf die Kerntemperatur — ein kühles Zimmer unterstützt diesen Prozess.' },
+  { id:'sl_04', category:'schlaf', priority:2, icon:'☕',
+    title:'Koffein hat eine lange Halbwertszeit',
+    body:'Koffein hat eine Halbwertszeit von 5–7 Stunden. Kaffee um 14 Uhr bedeutet, dass um 21 Uhr noch die Hälfte aktiv ist — plane deinen letzten Kaffee früh genug.' },
+  { id:'sl_05', category:'schlaf', priority:3, icon:'😌',
+    title:'Schlafschuld lässt sich nicht aufholen',
+    body:'Ausschlafen am Wochenende gleicht die Woche nicht aus. Konsequente Schlafdauer wirkt sich besser auf Konzentration und Stimmung aus als unregelmäßiges Nachholen.' },
+
+  // ── Sport ────────────────────────────────────────────────────────────────────
+  { id:'sp_01', category:'sport', priority:1, icon:'🔥',
+    title:'Aufwärmen beugt Verletzungen vor',
+    body:'5–10 Minuten dynamisches Aufwärmen (nicht statisches Dehnen vor dem Sport) erhöhen die Muskeltemperatur und reduzieren das Verletzungsrisiko signifikant.' },
+  { id:'sp_02', category:'sport', priority:1, icon:'😴',
+    title:'Ruhetage sind Teil des Trainings',
+    body:'Muskeln wachsen in der Erholung, nicht im Training. 2–3 Ruhetage pro Woche sind kein Rückschritt — sie sind Voraussetzung für Fortschritt.' },
+  { id:'sp_03', category:'sport', priority:2, icon:'📈',
+    title:'Progressive Überlastung als Prinzip',
+    body:'Steigere Umfang oder Intensität um maximal 10% pro Woche. Mehr führt zu Überlastungsschäden, weniger zu Stagnation. Kleine, konstante Steigerungen gewinnen.' },
+  { id:'sp_04', category:'sport', priority:2, icon:'🏃',
+    title:'NEAT zählt genauso wie Sport',
+    body:'Non-Exercise Activity Thermogenesis (NEAT) — Treppen statt Aufzug, 10 Minuten spazieren — verbrennt bei aktiven Menschen mehr Kalorien als gezieltes Training.' },
+  { id:'sp_05', category:'sport', priority:3, icon:'💪',
+    title:'Krafttraining schützt Muskelmasse beim Abnehmen',
+    body:'Ohne Krafttraining verlierst du im Kaloriendefizit bis zu 40% deines Gewichtsverlusts als Muskeln. Selbst 2× pro Woche Krafttraining verhindert das.' },
+
+  // ── Stimmung ─────────────────────────────────────────────────────────────────
+  { id:'mood_01', category:'stimmung', priority:1, icon:'🌳',
+    title:'20 Minuten Natur senken Cortisol messbar',
+    body:'Schon 20 Minuten in der Natur reduzieren Cortisol (Stresshormon) signifikant. Kein Wald nötig — ein Park reicht vollständig aus.' },
+  { id:'mood_02', category:'stimmung', priority:1, icon:'🫁',
+    title:'4-7-8 Atemtechnik gegen Stress',
+    body:'Einatmen für 4 Sekunden, halten für 7, ausatmen für 8. Drei Wiederholungen aktivieren das parasympathische Nervensystem und reduzieren Stress sofort.' },
+  { id:'mood_03', category:'stimmung', priority:2, icon:'📔',
+    title:'3 positive Dinge täglich notieren',
+    body:'Das "Three Good Things"-Journal trainiert das Gehirn nachweislich auf Optimismus. 5 Minuten täglich — 3 konkrete positive Erlebnisse aufschreiben.' },
+  { id:'mood_04', category:'stimmung', priority:2, icon:'🤝',
+    title:'Soziale Verbindungen schützen die Gesundheit',
+    body:'Einsamkeit hat laut Forschung ähnliche Auswirkungen auf die Lebenserwartung wie Rauchen. Bewusste Zeit mit Menschen, die dir guttun, ist kein Luxus.' },
+  { id:'mood_05', category:'stimmung', priority:3, icon:'📵',
+    title:'Social Media und Vergleiche erkennen',
+    body:'Instagram und Co. zeigen bewusst ausgewählte Highlights. Ein 30-Minuten-Limit für Social Media hat in Studien Depressionen und Angst messbar reduziert.' },
+
+  // ── Herzfrequenz ─────────────────────────────────────────────────────────────
+  { id:'herz_01', category:'herz', priority:1, icon:'🛌',
+    title:'Ruhepuls morgens messen',
+    body:'Miss deinen Ruhepuls direkt nach dem Aufwachen, bevor du aufstehst. Morgens liegt die BPM-Messung am nächsten an deinem echten Ruhepuls (ohne Aktivitätseinfluss).' },
+  { id:'herz_02', category:'herz', priority:2, icon:'📊',
+    title:'Ruhepuls als Fitness-Indikator',
+    body:'Ein niedriger Ruhepuls (40–60 bpm) zeigt gute Herzeffizienz. Profisportler haben oft 40–50 bpm. Mit steigender Ausdauerfitness sinkt der Ruhepuls langfristig.' },
+  { id:'herz_03', category:'herz', priority:2, icon:'⚠️',
+    title:'Erhöhter Ruhepuls als Warnsignal',
+    body:'Ein Ruhepuls 10+ bpm über deinem Normalwert deutet auf Übertraining, beginnende Krankheit oder Schlafmangel hin. An solchen Tagen: Pause einlegen.' },
+
+  // ── Blutdruck ────────────────────────────────────────────────────────────────
+  { id:'bp_01', category:'blutdruck', priority:1, icon:'🪑',
+    title:'5 Minuten still sitzen vor der Messung',
+    body:'Sitze mindestens 5 Minuten ruhig, bevor du misst. Kein Kaffee, kein Sport, keine Aufregung vorher. Messungen direkt nach Aktivität können 20+ mmHg zu hoch sein.' },
+  { id:'bp_02', category:'blutdruck', priority:1, icon:'💪',
+    title:'Armposition ist entscheidend',
+    body:'Lege deinen Arm auf einer Unterlage auf Herzhöhe ab. Der Arm auf dem Schoß oder nach unten hängen kann die Messung um 5–10 mmHg verfälschen.' },
+  { id:'bp_03', category:'blutdruck', priority:2, icon:'📅',
+    title:'Mehrfach messen, Durchschnitt nehmen',
+    body:'Miss deinen Blutdruck 2–3 Mal im Abstand von 1–2 Minuten und notiere den Durchschnitt. Einzelmessungen schwanken stark — der Trend über Wochen zählt.' },
+
+  // ── Schritte ──────────────────────────────────────────────────────────────────
+  { id:'sc_01', category:'schritte', priority:1, icon:'🎯',
+    title:'10.000 Schritte: Ein Marketing-Ziel',
+    body:'Die 10.000-Schritte-Empfehlung stammt aus einer japanischen Werbekampagne von 1965. Aktuelle Forschung zeigt: Schon 7.000–8.000 Schritte reduzieren Sterberisiko deutlich.' },
+  { id:'sc_02', category:'schritte', priority:2, icon:'🪜',
+    title:'Aktive Mikro-Pausen einbauen',
+    body:'30 Minuten sitzen und aufstehen ist besser als 6 Stunden sitzen mit 30 Minuten Sport. Alle 45–60 Minuten 5 Minuten bewegen reduziert Herz-Kreislauf-Risiken.' },
+
+  // ── Allgemein / Dashboard ────────────────────────────────────────────────────
+  { id:'gen_01', category:'general', priority:1, icon:'🧪',
+    title:'Tracking verändert Verhalten',
+    body:'Allein das Aufschreiben von Essen führt in Studien zu 20–25% bewussterem Essverhalten. Du brauchst keine perfekte Ernährung — nur ehrliches Tracking.' },
+  { id:'gen_02', category:'general', priority:1, icon:'🔁',
+    title:'Konsistenz schlägt Perfektionismus',
+    body:'80% korrekt über 12 Monate ist besser als 100% perfekt für 3 Wochen. Eine verpasste Woche löscht nicht Monate guter Gewohnheiten.' },
+  { id:'gen_03', category:'general', priority:2, icon:'🌊',
+    title:'Hydration beeinflusst fast alles',
+    body:'Bereits 2% Dehydration reduzieren kognitive Leistung um 10–15%. Müdigkeit, Kopfschmerzen und Heißhunger sind oft erstes Anzeichen für zu wenig Wasser.' },
+  { id:'gen_04', category:'general', priority:2, icon:'🫀',
+    title:'Bewegung ist die beste Medizin',
+    body:'150 Minuten moderate Bewegung pro Woche (WHO-Empfehlung) reduzieren Herzerkrankungen um 35%, Diabetes um 50%, und einige Krebsarten um 20–30%.' },
+  { id:'gen_05', category:'general', priority:2, icon:'⚖️',
+    title:'Kleine Gewohnheiten, große Wirkung',
+    body:'Eine Kalorien-Ersparnis von 100 kcal/Tag (1 Keks) summiert sich auf ca. 5 kg Gewichtsverlust pro Jahr. Radikale Diäten sind nicht nötig.' },
+  { id:'gen_06', category:'general', priority:3, icon:'📊',
+    title:'Trends zählen, nicht einzelne Datenpunkte',
+    body:'Ein schlechter Tag verbessert oder verschlechtert nichts grundlegend. Gesundheit ist ein Durchschnittswert über Wochen und Monate — nicht ein Tageswert.' },
+  { id:'gen_07', category:'general', priority:3, icon:'🧠',
+    title:'Schlaf ist der stärkste Performance-Faktor',
+    body:'Chronischer Schlafmangel (< 7h) verdoppelt das Risiko für Übergewicht, beeinträchtigt Muskelaufbau und halbiert die Impfwirksamkeit. Schlaf ist kein Luxus.' },
+  { id:'gen_08', category:'general', priority:1, icon:'🌅',
+    title:'Morgenroutinen starten mit Licht',
+    body:'Natürliches Licht innerhalb der ersten Stunde nach dem Aufwachen setzt die innere Uhr, stärkt den Cortisolpeak morgens und verbessert die Schlafqualität abends.' },
+];
+
+// ── Tipp-Hook — wählt Tipp des Tages nach Kategorie ─────────────────────────
+// Deterministisch rotierend: Tipp ändert sich täglich, ist aber für alle Nutzer
+// am gleichen Tag identisch (basiert auf Datum-Hash).
+function useTip(category, { skipDismissed = true } = {}) {
+  const today = toDay();
+  // Einfacher deterministischer Hash: Tag im Jahr → Index
+  const dayOfYear = Math.floor((new Date(today) - new Date(today.slice(0,4)+'-01-01')) / 864e5);
+
+  const pool = TIPS_DB
+    .filter(t => t.category === category || (category === 'general' && t.category === 'general'))
+    .sort((a,b) => a.priority - b.priority || a.id.localeCompare(b.id));
+
+  if (!pool.length) return null;
+  return pool[dayOfYear % pool.length] || pool[0];
+}
+
+// ── useDismiss — Tipp dauerhaft ausblenden (via localStorage) ────────────────
+function useDismiss() {
+  const [dismissed, setDismissed] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('hl_dismissed_tips') || '[]')); }
+    catch { return new Set(); }
+  });
+  const dismiss = (id) => {
+    setDismissed(prev => {
+      const next = new Set(prev); next.add(id);
+      localStorage.setItem('hl_dismissed_tips', JSON.stringify([...next]));
+      return next;
+    });
+  };
+  return { dismissed, dismiss };
+}
+
+// Globale Dismiss-Instanz (wird einmal geladen, dann geteilt via prop)
+// Wird in App() instanziiert und an Komponenten weitergegeben
+
+// ── TipBanner — kollabierbare Inline-Tipp-Leiste ─────────────────────────────
+// Platzierung: Oben in Formular-Cards, unter der Form-Überschrift
+// Verhalten: Standardmäßig kollabiert (nur Icon + Titel sichtbar)
+//            Klick → expandiert Body
+//            × → dauerhaft ausgeblendet (dismissed)
+function TipBanner({ tip, dismissed, onDismiss, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  if (!tip || dismissed?.has(tip.id)) return null;
+
+  return (
+    <div style={{
+      marginBottom: 14,
+      borderRadius: 10,
+      border: `1px solid ${C.accent}30`,
+      background: `${C.accent}0A`,
+      overflow: 'hidden',
+    }}>
+      {/* ── Collapsed Header (immer sichtbar) ── */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', background: 'none', border: 'none',
+          padding: '9px 12px', display: 'flex', alignItems: 'center',
+          gap: 8, cursor: 'pointer', textAlign: 'left',
+        }}>
+        <span style={{ fontSize: 15, flexShrink: 0 }}>{tip.icon}</span>
+        <span style={{
+          flex: 1, fontSize: 11, fontWeight: 600, color: C.accent,
+          letterSpacing: 0.2, lineHeight: 1.3,
+        }}>
+          {tip.title}
+        </span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          <span style={{
+            fontSize: 9, color: C.accent, letterSpacing: 0.8,
+            textTransform: 'uppercase', opacity: 0.7,
+          }}>
+            {open ? '▲' : 'Tipp ▼'}
+          </span>
+        </div>
+      </button>
+
+      {/* ── Expanded Body ── */}
+      {open && (
+        <div style={{
+          padding: '0 12px 12px',
+          borderTop: `1px solid ${C.accent}20`,
+          paddingTop: 10,
+        }}>
+          <p style={{
+            fontSize: 12, color: C.muted, lineHeight: 1.75,
+            margin: 0, marginBottom: 10,
+          }}>
+            {tip.body}
+          </p>
+          {onDismiss && (
+            <button
+              onClick={() => onDismiss(tip.id)}
+              style={{
+                fontSize: 10, color: C.faint, background: 'none',
+                border: `1px solid ${C.faint}40`, borderRadius: 5,
+                padding: '2px 9px', cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+              Nicht mehr anzeigen
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── TipTooltip — (?) Feldebenen-Tooltip ──────────────────────────────────────
+// Platzierung: Inline neben Labels ("Körperfett % (?)")
+// Verhalten: Tap → kleines Popup unter dem Icon
+function TipTooltip({ text }) {
+  const [show, setShow] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!show) return;
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setShow(false); };
+    document.addEventListener('touchstart', close);
+    document.addEventListener('mousedown', close);
+    return () => { document.removeEventListener('touchstart', close); document.removeEventListener('mousedown', close); };
+  }, [show]);
+
+  return (
+    <span ref={ref} style={{ position: 'relative', display: 'inline-block', marginLeft: 4 }}>
+      <button
+        onClick={() => setShow(s => !s)}
+        style={{
+          width: 15, height: 15, borderRadius: '50%',
+          background: C.faint, border: 'none',
+          color: C.muted, fontSize: 9, fontWeight: 700,
+          cursor: 'pointer', display: 'inline-flex',
+          alignItems: 'center', justifyContent: 'center',
+          verticalAlign: 'middle', lineHeight: 1,
+          fontFamily: 'inherit',
+        }}>
+        ?
+      </button>
+      {show && (
+        <div style={{
+          position: 'absolute', left: 0, top: '100%', marginTop: 4,
+          width: 220, padding: '8px 10px', borderRadius: 8,
+          background: C.card, border: `1px solid ${C.border}`,
+          fontSize: 11, color: C.muted, lineHeight: 1.65,
+          zIndex: 100, boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+        }}>
+          {text}
+        </div>
+      )}
+    </span>
+  );
+}
+
+// ── DailyTipCard — Dashboard-Tipp des Tages ──────────────────────────────────
+// Platzierung: Am Ende des Dashboard, vor den Schnelleinträgen
+// Verhalten: Täglich wechselnd, vollständig sichtbar, optional dismissbar
+function DailyTipCard({ entries, dismissed, onDismiss }) {
+  // Kontextbasiert: wähle Tipp aus der Kategorie, die heute noch nicht getrackt wurde
+  const today = toDay();
+  const todayTypes = new Set(entries.filter(e => e.date === today).map(e => e.type));
+  const dayOfYear  = Math.floor((new Date(today) - new Date(today.slice(0,4)+'-01-01')) / 864e5);
+
+  // Priorität: allgemeine Tipps + Tipp der am wenigsten getrackte Kategorie
+  const priorityPool = TIPS_DB.filter(t => {
+    if (dismissed?.has(t.id)) return false;
+    // Bevorzuge Tipps für Metriken, die heute noch nicht getrackt wurden
+    if (t.category !== 'general' && !todayTypes.has(t.category)) return true;
+    if (t.category === 'general') return true;
+    return false;
+  }).sort((a,b) => a.priority - b.priority);
+
+  const tip = priorityPool.length
+    ? priorityPool[dayOfYear % priorityPool.length]
+    : TIPS_DB.filter(t => !dismissed?.has(t.id))[dayOfYear % Math.max(1, TIPS_DB.filter(t => !dismissed?.has(t.id)).length)];
+
+  if (!tip) return null;
+
+  return (
+    <div style={{
+      ...ST.card,
+      border: `1px solid ${C.accent}35`,
+      background: `linear-gradient(135deg, ${C.card} 0%, ${C.cardAlt} 100%)`,
+      marginBottom: 16, padding: '14px 16px',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        marginBottom: 10,
+      }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: 8,
+          background: `${C.accent}18`, border: `1px solid ${C.accent}30`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 14, flexShrink: 0,
+        }}>
+          {tip.icon}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{
+            fontSize: 9, color: C.accent, letterSpacing: 1.2,
+            textTransform: 'uppercase', marginBottom: 1, fontWeight: 600,
+          }}>
+            Tipp des Tages
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.text, lineHeight: 1.2 }}>
+            {tip.title}
+          </div>
+        </div>
+        {onDismiss && (
+          <button
+            onClick={() => onDismiss(tip.id)}
+            style={{
+              background: 'none', border: 'none', color: C.faint,
+              fontSize: 16, cursor: 'pointer', padding: '0 2px',
+              lineHeight: 1, flexShrink: 0,
+            }}>
+            ×
+          </button>
+        )}
+      </div>
+
+      {/* Body */}
+      <p style={{
+        fontSize: 12, color: C.muted, lineHeight: 1.75,
+        margin: 0,
+      }}>
+        {tip.body}
+      </p>
+
+      {/* Footer: Kategorie-Badge */}
+      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{
+          fontSize: 9, padding: '2px 8px', borderRadius: 8,
+          background: `${C.accent}14`, color: C.accent,
+          letterSpacing: 0.6, textTransform: 'uppercase',
+        }}>
+          {tip.category === 'general'
+            ? 'Allgemein'
+            : METRICS[tip.category]?.label || tip.category}
+        </span>
+        <span style={{ fontSize: 9, color: C.faint }}>
+          {TIPS_DB.filter(t => !dismissed?.has(t.id)).length} Tipps verfügbar
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ── DatePicker Feld (nur für neue Einträge) ───────────────────────────────────
 function DatePickerField({ value, onChange }) {
   return (
@@ -1132,17 +1544,22 @@ function DatePickerField({ value, onChange }) {
 }
 
 // ── Forms ─────────────────────────────────────────────────────────────────────
-function GewichtForm({ add, settings, initialData, onSave, onClose }) {
+function GewichtForm({ add, settings, initialData, onSave, onClose, dismissed, onDismiss }) {
   const [w,setW]=useState(initialData?String(initialData.weight):''); const [fat,setFat]=useState(initialData&&initialData.fat!=null?String(initialData.fat):''); const [note,setN]=useState(initialData?initialData.note||'':'');
   const [date,setDate]=useState(toDay());
+  const tip = useTip('gewicht');
   const b  = w ? calcBMI(+w,settings.height) : null;
   const bl = b ? (b<18.5?'Untergewicht':b<25?'Normalgewicht':b<30?'Übergewicht':'Adipositas') : '';
   return <>
+    <TipBanner tip={tip} dismissed={dismissed} onDismiss={onDismiss}/>
     {!initialData && <DatePickerField value={date} onChange={setDate}/>}
     <label style={ST.lbl}>Gewicht (kg)</label>
     <input style={ST.inp} type="number" step="0.1" inputMode="decimal" placeholder="70.5" value={w} onChange={e=>setW(e.target.value)} />
     {b&&<div style={{fontSize:12,color:b>=18.5&&b<25?C.success:C.accent,marginTop:-8,marginBottom:12}}>BMI {b} — {bl}</div>}
-    <label style={ST.lbl}>Körperfett % (optional)</label>
+    <label style={ST.lbl}>Körperfett %
+      <TipTooltip text="Körperfett lässt sich präziser mit einem Kalipper oder einer DEXA-Messung bestimmen. Heimwaagen haben oft ±5% Fehlerquote."/>
+      <span style={{color:C.muted,fontWeight:400}}> (optional)</span>
+    </label>
     <input style={ST.inp} type="number" step="0.1" inputMode="decimal" placeholder="18.0" value={fat} onChange={e=>setFat(e.target.value)} />
     <label style={ST.lbl}>Notiz</label>
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
@@ -1152,13 +1569,15 @@ function GewichtForm({ add, settings, initialData, onSave, onClose }) {
   </>;
 }
 
-function SportForm({ add, initialData, onSave, onClose }) {
+function SportForm({ add, initialData, onSave, onClose, dismissed, onDismiss }) {
   const types=['Laufen','Gym','Radfahren','Schwimmen','Yoga','HIIT','Wandern','Sonstiges'];
   const intL=['Sehr leicht','Leicht','Mittel','Hart','Maximal'];
   const [st,setSt]=useState(initialData?initialData.sportType:'Laufen'); const [dur,setDur]=useState(initialData?String(initialData.duration):'');
   const [int,setInt]=useState(initialData?initialData.intensity:3); const [cal,setCal]=useState(initialData&&initialData.calories!=null?String(initialData.calories):''); const [note,setN]=useState(initialData?initialData.note||'':'');
   const [date,setDate]=useState(toDay());
+  const tip = useTip('sport');
   return <>
+    <TipBanner tip={tip} dismissed={dismissed} onDismiss={onDismiss}/>
     {!initialData && <DatePickerField value={date} onChange={setDate}/>}
     <label style={ST.lbl}>Sportart</label>
     <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
@@ -1168,7 +1587,10 @@ function SportForm({ add, initialData, onSave, onClose }) {
     <input style={ST.inp} type="number" inputMode="numeric" placeholder="45" value={dur} onChange={e=>setDur(e.target.value)} />
     <label style={ST.lbl}>Intensität — {int}/5 · {intL[int-1]}</label>
     <input type="range" min="1" max="5" value={int} onChange={e=>setInt(+e.target.value)} style={ST.sld(C.sport)} />
-    <label style={ST.lbl}>Kalorien verbrannt (optional)</label>
+    <label style={ST.lbl}>Kalorien verbrannt
+      <TipTooltip text="Kalorienangaben von Geräten und Apps können um 20–30% abweichen. Für grobe Schätzungen gut genug, aber nicht auf einzelne Kalorie verlassen."/>
+      <span style={{color:C.muted,fontWeight:400}}> (optional)</span>
+    </label>
     <input style={ST.inp} type="number" inputMode="numeric" placeholder="300" value={cal} onChange={e=>setCal(e.target.value)} />
     <label style={ST.lbl}>Notiz</label>
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
@@ -1177,11 +1599,13 @@ function SportForm({ add, initialData, onSave, onClose }) {
   </>;
 }
 
-function StimmungForm({ add, initialData, onSave, onClose }) {
+function StimmungForm({ add, initialData, onSave, onClose, dismissed, onDismiss }) {
   const [mood,setM]=useState(initialData?initialData.mood:7); const [energy,setE]=useState(initialData?initialData.energy:7);
   const [stress,setS]=useState(initialData?initialData.stress:3); const [note,setN]=useState(initialData?initialData.note||'':'');
   const [date,setDate]=useState(toDay());
+  const tip = useTip('stimmung');
   return <>
+    <TipBanner tip={tip} dismissed={dismissed} onDismiss={onDismiss}/>
     {!initialData && <DatePickerField value={date} onChange={setDate}/>}
     <label style={ST.lbl}>Stimmung — {mood}/10</label>
     <input type="range" min="1" max="10" value={mood}   onChange={e=>setM(+e.target.value)} style={ST.sld(C.mood)} />
@@ -1587,15 +2011,19 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
 }
 
 
-function SchlafForm({ add, initialData, onSave, onClose }) {
+function SchlafForm({ add, initialData, onSave, onClose, dismissed, onDismiss }) {
   const [hours,setH]=useState(initialData?initialData.hours:7.5); const [quality,setQ]=useState(initialData?initialData.quality:3); const [note,setN]=useState(initialData?initialData.note||'':'');
   const qualLabel=['Sehr schlecht','Schlecht','Ok','Gut','Sehr gut'];
   const [date,setDate]=useState(toDay());
+  const tip = useTip('schlaf');
   return <>
+    <TipBanner tip={tip} dismissed={dismissed} onDismiss={onDismiss}/>
     {!initialData && <DatePickerField value={date} onChange={setDate}/>}
     <label style={ST.lbl}>Schlafdauer — {hours} Stunden</label>
     <input type="range" min="2" max="12" step="0.5" value={hours} onChange={e=>setH(+e.target.value)} style={ST.sld(C.sleep)} />
-    <label style={ST.lbl}>Qualität — {quality}/5 · {qualLabel[quality-1]}</label>
+    <label style={ST.lbl}>Qualität — {quality}/5 · {qualLabel[quality-1]}
+      <TipTooltip text="Schlafqualität berücksichtigt: Einschlafdauer, Durchschlafen, Erholung beim Aufwachen. Ideal: unter 15 Min einschlafen, kein Aufwachen, ausgeruht morgens."/>
+    </label>
     <input type="range" min="1" max="5" value={quality} onChange={e=>setQ(+e.target.value)} style={ST.sld(C.sleep)} />
     <label style={ST.lbl}>Notiz</label>
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
@@ -1604,12 +2032,16 @@ function SchlafForm({ add, initialData, onSave, onClose }) {
   </>;
 }
 
-function SchrittForm({ add, initialData, onSave, onClose }) {
+function SchrittForm({ add, initialData, onSave, onClose, dismissed, onDismiss }) {
   const [steps,setS]=useState(initialData?String(initialData.steps):''); const [note,setN]=useState(initialData?initialData.note||'':'');
   const [date,setDate]=useState(toDay());
+  const tip = useTip('schritte');
   return <>
+    <TipBanner tip={tip} dismissed={dismissed} onDismiss={onDismiss}/>
     {!initialData && <DatePickerField value={date} onChange={setDate}/>}
-    <label style={ST.lbl}>Schritte</label>
+    <label style={ST.lbl}>Schritte
+      <TipTooltip text="Schon 7.000–8.000 Schritte täglich zeigen klare Gesundheitsvorteile. Die 10.000-Schritte-Empfehlung stammt aus einer Werbekampagne, nicht aus medizinischer Forschung."/>
+    </label>
     <input style={ST.inp} type="number" inputMode="numeric" placeholder="8000" value={steps} onChange={e=>setS(e.target.value)} />
     <label style={ST.lbl}>Notiz</label>
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
@@ -1628,16 +2060,20 @@ function classifyHR(bpm) {
   if(bpm<=120)return {label:'Erhöht',            color:'#D0A060'};
   return             {label:'Tachykardie',       color:'#B87060'};
 }
-function HerzForm({ add, initialData, onSave, onClose }) {
+function HerzForm({ add, initialData, onSave, onClose, dismissed, onDismiss }) {
   const ctx=['Ruhe','Nach Sport','Aufwachen','Sonstiges'];
   const [bpm,setBpm]=useState(initialData?String(initialData.bpm):'');
   const [context,setCtx]=useState(initialData?.context||'Ruhe');
   const [note,setN]=useState(initialData?.note||'');
   const [date,setDate]=useState(toDay());
+  const tip = useTip('herz');
   const cls=bpm?classifyHR(+bpm):null;
   return <>
+    <TipBanner tip={tip} dismissed={dismissed} onDismiss={onDismiss}/>
     {!initialData&&<DatePickerField value={date} onChange={setDate}/>}
-    <label style={ST.lbl}>Herzfrequenz (bpm)</label>
+    <label style={ST.lbl}>Herzfrequenz (bpm)
+      <TipTooltip text="Miss den Ruhepuls immer unter gleichen Bedingungen: morgens nach dem Aufwachen, vor dem Aufstehen. Konsistenz ist wichtiger als absolute Genauigkeit."/>
+    </label>
     <input style={ST.inp} type="number" inputMode="numeric" placeholder="72" value={bpm} onChange={e=>setBpm(e.target.value)}/>
     {cls&&<div style={{fontSize:12,color:cls.color,marginTop:-8,marginBottom:12,fontWeight:500}}>{cls.label}</div>}
     <label style={ST.lbl}>Kontext</label>
@@ -1660,22 +2096,28 @@ function classifyBP(sys,dia) {
   if(sys<180&&dia<110) return {label:'Hypertonie Grad 2',color:'#C07050'};
   return                      {label:'Hypertonie Grad 3',color:'#B87060'};
 }
-function BlutdruckForm({ add, initialData, onSave, onClose }) {
+function BlutdruckForm({ add, initialData, onSave, onClose, dismissed, onDismiss }) {
   const [sys,setSys]=useState(initialData?String(initialData.sys):'');
   const [dia,setDia]=useState(initialData?String(initialData.dia):'');
   const [pulse,setPulse]=useState(initialData?.pulse?String(initialData.pulse):'');
   const [note,setN]=useState(initialData?.note||'');
   const [date,setDate]=useState(toDay());
+  const tip = useTip('blutdruck');
   const cls=(sys&&dia)?classifyBP(+sys,+dia):null;
   return <>
+    <TipBanner tip={tip} dismissed={dismissed} onDismiss={onDismiss}/>
     {!initialData&&<DatePickerField value={date} onChange={setDate}/>}
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
       <div>
-        <label style={ST.lbl}>Systolisch</label>
+        <label style={ST.lbl}>Systolisch
+          <TipTooltip text="Der höhere Wert — Druck beim Herzschlag. Normal: unter 120 mmHg."/>
+        </label>
         <input style={ST.inp} type="number" inputMode="numeric" placeholder="120" value={sys} onChange={e=>setSys(e.target.value)}/>
       </div>
       <div>
-        <label style={ST.lbl}>Diastolisch</label>
+        <label style={ST.lbl}>Diastolisch
+          <TipTooltip text="Der niedrigere Wert — Druck zwischen den Herzschlägen. Normal: unter 80 mmHg."/>
+        </label>
         <input style={ST.inp} type="number" inputMode="numeric" placeholder="80" value={dia} onChange={e=>setDia(e.target.value)}/>
       </div>
     </div>
@@ -4439,6 +4881,9 @@ function App() {
   const [journalAdd,setJournalAdd] = useState(null);
   const [showProfile,setShowProfile] = useState(false);
 
+  // ── Tipp-System: Dismiss-State ────────────────────────────────────────────
+  const { dismissed, dismiss } = useDismiss();
+
   // Akzentfarbe aus Settings übernehmen (mutiert C vor jedem Render)
   C.accent = settings.accentColor || '#C8B89A';
 
@@ -4730,6 +5175,9 @@ function App() {
         ))}
       </div>
 
+      {/* ── Tipp des Tages ── */}
+      <DailyTipCard entries={entries} dismissed={dismissed} onDismiss={dismiss}/>
+
       <div style={ST.secttl}>Schnelleintrag</div>
       <div style={ST.grid2}>
         {Object.entries(METRICS).map(([key,m])=>(
@@ -4785,14 +5233,14 @@ function App() {
               <div style={{fontSize:10,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:2}}>Eintrag</div>
               <div style={{fontSize:16,fontWeight:600,color:METRICS[activeForm].color}}>{METRICS[activeForm].label}</div>
             </div>
-            {activeForm==='gewicht'    && <GewichtForm    add={add} settings={settings}/>}
-            {activeForm==='sport'      && <SportForm      add={add}/>}
-            {activeForm==='stimmung'   && <StimmungForm   add={add}/>}
+            {activeForm==='gewicht'    && <GewichtForm    add={add} settings={settings} dismissed={dismissed} onDismiss={dismiss}/>}
+            {activeForm==='sport'      && <SportForm      add={add} dismissed={dismissed} onDismiss={dismiss}/>}
+            {activeForm==='stimmung'   && <StimmungForm   add={add} dismissed={dismissed} onDismiss={dismiss}/>}
             {activeForm==='ernaehrung' && <ErrorBoundary><ErnaehrungForm add={add}/></ErrorBoundary>}
-            {activeForm==='schlaf'     && <SchlafForm     add={add}/>}
-            {activeForm==='schritte'   && <SchrittForm    add={add}/>}
-            {activeForm==='herz'        && <HerzForm       add={add}/>}
-            {activeForm==='blutdruck'   && <BlutdruckForm  add={add}/>}
+            {activeForm==='schlaf'     && <SchlafForm     add={add} dismissed={dismissed} onDismiss={dismiss}/>}
+            {activeForm==='schritte'   && <SchrittForm    add={add} dismissed={dismissed} onDismiss={dismiss}/>}
+            {activeForm==='herz'        && <HerzForm       add={add} dismissed={dismissed} onDismiss={dismiss}/>}
+            {activeForm==='blutdruck'   && <BlutdruckForm  add={add} dismissed={dismissed} onDismiss={dismiss}/>}
             {activeForm==='koerpermass' && <KoerpermassForm add={add}/>}
             {activeForm==='zyklus'      && <ZyklusForm add={add} entries={entries}/>}
           </div>
@@ -5677,7 +6125,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v5.7</span>
+          <span>v5.8</span>
         </div>
       </header>
 
