@@ -72,6 +72,9 @@
     0%,100%{opacity:0.2;transform:scale(0.8);}
     50%{opacity:1;transform:scale(1.1);}
   }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
 </style>
 <div id="root"></div>
 
@@ -1659,7 +1662,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-function ErnaehrungForm({ add, initialData, onSave, onClose }) {
+function ErnaehrungForm({ add, initialData, onSave, onClose, entries }) {
   // Beim Bearbeiten: richtigen Tab + Produkt vorausfüllen
   const initTab = () => {
     if (!initialData) return 'suche';
@@ -1687,20 +1690,22 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
     };
   };
 
-  const [tab,    setTab]  = useState(initTab);
-  const [date,   setDate] = useState(toDay());
-  const [mealTag,setMT]   = useState(initialData?.mealTag||'');
+  const [tab,      setTab]  = useState(initTab);
+  const [date,     setDate] = useState(toDay());
+  const [mealTag,  setMT]   = useState(initialData?.mealTag||'');
 
   // Suche
-  const [searchQ,setSQ]   = useState('');
-  const [results,setRes]  = useState([]);
-  const [loading,setLoad] = useState(false);
-  const [selProd,setSel]  = useState(initSel);
-  const [qty,    setQty]  = useState(String(initialData?.quantity||100));
-  const [unit,   setUnit] = useState(initialData?.unit||'g');
-  const [scanErr,setScanE]= useState('');
-  const captureRef        = useRef(null);
-  const abortRef          = useRef(null);
+  const [searchQ,  setSQ]      = useState('');
+  const [results,  setRes]     = useState([]);
+  const [loading,  setLoad]    = useState(false);
+  const [selProd,  setSel]     = useState(initSel);
+  const [qty,      setQty]     = useState(String(initialData?.quantity||100));
+  const [unit,     setUnit]    = useState(initialData?.unit||'g');
+  const [scanErr,  setScanE]   = useState('');
+  const [addedMsg, setAddedMsg]= useState('');   // ✓-Toast nach Eintragen
+  const captureRef             = useRef(null);
+  const abortRef               = useRef(null);
+  const searchRef              = useRef(null);   // Re-Fokus nach Speichern
 
   // Wasser-Tab
   const [water, setW]     = useState(initialData?.water ?? 0);
@@ -1722,6 +1727,20 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
   const [mSalt,  setMSa] = useState(initialData&&!initialData.productName ? backCalc(initialData.salt,mq0) : '');
   const [mQty,   setMQ2] = useState(String(mq0));
   const [mUnit,  setMU]  = useState(initialData?.unit||'g');
+
+  // ── Verlauf — letzte eingetragene Produkte (de-dupliziert nach Name) ───────
+  const foodHistory = useMemo(() => {
+    if (!entries) return [];
+    const seen = new Set();
+    return entries
+      .filter(e => e.type === 'ernaehrung' && e.data?.productName)
+      .filter(e => {
+        if (seen.has(e.data.productName)) return false;
+        seen.add(e.data.productName);
+        return true;
+      })
+      .slice(0, 25);
+  }, [entries]);
 
   // ── Suche — ausschließlich OpenFoodFacts API ───────────────────────────────
   const doSearch = async q => {
@@ -1782,6 +1801,9 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
   const N = calcN();
   const presets = selProd?.isLiq ? [100,200,250,330,500] : [25,50,100,150,200];
 
+  // Ähnliche Produkte = restliche Suchergebnisse beim aktuell gewählten Produkt
+  const similarProds = selProd ? results.filter(r => r.name !== selProd.name).slice(0,6) : [];
+
   // ── Barcode — direkt OpenFoodFacts API ────────────────────────────────────
   const handleCapture = async e => {
     const file = e?.target?.files?.[0]; if (!file) return; e.target.value=''; setScanE('');
@@ -1807,6 +1829,10 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
   };
 
   // ── Speichern ──────────────────────────────────────────────────────────────
+  const showToast = name => {
+    setAddedMsg(name);
+    setTimeout(() => setAddedMsg(''), 3000);
+  };
   const saveProduct = () => {
     if (!selProd || !N) return;
     const d = { mealTag, water:selProd.isLiq?(+qty||0):0,
@@ -1815,6 +1841,14 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
       productName:selProd.name, brand:selProd.brand,
       quantity:+qty, unit, barcode:'', note:'' };
     onSave ? onSave(d) : add('ernaehrung', d, date);
+    if (!onSave) {
+      // Kontext beibehalten: Suche offen lassen für direkt nächstes Produkt
+      showToast(selProd.name);
+      setSel(null);
+      setQty('100');
+      // Fokus zurück auf Suchfeld nach kurzem Delay
+      setTimeout(() => searchRef.current?.focus(), 80);
+    }
   };
   const saveWasser = () => {
     const d = { mealTag, water, mealQ, calories:cal?+cal:null, note, productName:null, brand:'' };
@@ -1830,6 +1864,11 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
       salt:p(mSalt,2), productName:mName||'Manuell eingetragen',
       brand:'', quantity:q, unit:mUnit, barcode:'', note };
     onSave ? onSave(d) : add('ernaehrung', d, date);
+  };
+  // Verlauf: 1-Klick-Wiederholen mit gespeicherter Menge
+  const quickAddHistory = histEntry => {
+    add('ernaehrung', { ...histEntry.data, mealTag }, date);
+    showToast(histEntry.data.productName);
   };
 
   // ── Nährstoff-Tabelle ──────────────────────────────────────────────────────
@@ -1856,7 +1895,12 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
     </div>
   );
 
-  const TABS=[{id:'suche',l:'🔍 Produkt'},{id:'wasser',l:'💧 Wasser'},{id:'manuell',l:'✎ Manuell'}];
+  const TABS=[
+    {id:'suche',   l:'🔍 Suche'},
+    {id:'verlauf', l:'⏱ Verlauf'},
+    {id:'wasser',  l:'💧 Wasser'},
+    {id:'manuell', l:'✎ Manuell'},
+  ];
 
   return <>
     <input ref={captureRef} type="file" accept="image/*" capture="environment"
@@ -1864,7 +1908,7 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
     {!initialData && <DatePickerField value={date} onChange={setDate}/>}
 
     <label style={ST.lbl}>Mahlzeit</label>
-    <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
+    <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:12}}>
       {['Frühstück','Mittagessen','Abendessen','Snack'].map(t=>(
         <button key={t} onClick={()=>setMT(mealTag===t?'':t)}
           style={{padding:'5px 12px',borderRadius:6,fontSize:12,
@@ -1874,22 +1918,46 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
       ))}
     </div>
 
-    <div style={{display:'flex',marginBottom:16,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
+    {/* ── ✓ Toast — bleibt über den Tabs damit er immer sichtbar ist ── */}
+    {addedMsg&&(
+      <div style={{
+        background:`${C.success}14`,border:`1px solid ${C.success}35`,
+        borderRadius:8,padding:'8px 12px',marginBottom:10,
+        display:'flex',alignItems:'center',gap:8
+      }}>
+        <span style={{fontSize:15,color:C.success,flexShrink:0}}>✓</span>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12,color:C.success,fontWeight:600,
+            overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+            {addedMsg}
+          </div>
+          <div style={{fontSize:10,color:C.muted,marginTop:1}}>
+            hinzugefügt · nächstes Produkt wählen
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── Tab-Bar (4 Tabs) ── */}
+    <div style={{display:'flex',marginBottom:14,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
       {TABS.map((t,i)=>(
         <button key={t.id} onClick={()=>setTab(t.id)}
-          style={{flex:1,padding:'9px 4px',fontSize:11,fontWeight:tab===t.id?600:400,
+          style={{flex:1,padding:'9px 2px',fontSize:10,fontWeight:tab===t.id?600:400,
             background:tab===t.id?`${C.water}18`:'transparent',
             color:tab===t.id?C.water:C.muted,border:'none',
-            borderRight:i<TABS.length-1?`1px solid ${C.border}`:'none'}}>
-          {t.l}</button>
+            borderRight:i<TABS.length-1?`1px solid ${C.border}`:'none',
+            letterSpacing:0.2}}>
+          {t.l}
+        </button>
       ))}
     </div>
 
-    {/* ── SUCHE ── */}
+    {/* ══════════════════════════ SUCHE ════════════════════════════════════ */}
     {tab==='suche'&&<>
       {!selProd?<>
         <div style={{display:'flex',gap:8,marginBottom:8}}>
-          <input style={{...ST.inp,marginBottom:0,flex:1}} placeholder="Apfel, Joghurt, Haferflocken…"
+          <input ref={searchRef} style={{...ST.inp,marginBottom:0,flex:1}}
+            placeholder="Apfel, Joghurt, Haferflocken…"
             value={searchQ} autoComplete="off"
             onChange={e=>{setSQ(e.target.value);doSearch(e.target.value);}}
             onKeyDown={e=>e.key==='Enter'&&doSearch(searchQ)}/>
@@ -1900,8 +1968,13 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
         </div>
         {scanErr&&<div style={{fontSize:11,color:C.danger,marginBottom:8,padding:'6px 10px',
           background:`${C.danger}14`,borderRadius:6}}>{scanErr}</div>}
-        {loading&&<div style={{fontSize:11,color:C.muted,marginBottom:6}}>🌐 Suche in OpenFoodFacts…</div>}
-        <div style={{maxHeight:240,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
+        {loading&&<div style={{fontSize:11,color:C.muted,marginBottom:6,display:'flex',alignItems:'center',gap:6}}>
+          <span style={{display:'inline-block',width:10,height:10,borderRadius:'50%',
+            border:`2px solid ${C.water}`,borderTopColor:'transparent',
+            animation:'spin 0.7s linear infinite'}}/>
+          Suche in OpenFoodFacts…
+        </div>}
+        <div style={{maxHeight:260,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
           {results.map(r=>(
             <button key={(r.code||'')+r.name} onClick={()=>pickProduct(r)}
               style={{width:'100%',background:C.cardAlt,border:`1px solid ${C.border}`,
@@ -1922,6 +1995,7 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
           <div style={{fontSize:11,color:C.faint,textAlign:'center',padding:'10px 0',lineHeight:1.8}}>
             Produktname tippen (min. 2 Zeichen) oder Barcode scannen</div>)}
       </>:<>
+        {/* ── Produkt-Detailansicht ── */}
         <div style={{...ST.card,marginBottom:12,background:C.cardAlt,padding:'12px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
             <div style={{flex:1,minWidth:0,paddingRight:8}}>
@@ -1929,7 +2003,7 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
                 whiteSpace:'nowrap'}}>{selProd.name}</div>
               {selProd.brand&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{selProd.brand}</div>}
             </div>
-            <button onClick={()=>{setSel(null);setSQ('');setRes([]);setScanE('');}}
+            <button onClick={()=>{setSel(null);setScanE('');}}
               style={{background:'none',border:'none',color:C.muted,fontSize:20,padding:0,
                 cursor:'pointer',flexShrink:0}}>✕</button>
           </div>
@@ -1957,12 +2031,95 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
           ))}
         </div>
         {N && <NutriTable n={N}/>}
+
+        {/* ── Ähnliche Produkte (aus derselben Suche) ── */}
+        {similarProds.length>0&&(
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:8}}>
+              Ähnliche Produkte
+            </div>
+            <div style={{display:'flex',gap:6,overflowX:'auto',WebkitOverflowScrolling:'touch',
+              paddingBottom:6,marginBottom:2}}>
+              {similarProds.map(r=>(
+                <button key={(r.code||'')+r.name} onClick={()=>pickProduct(r)}
+                  style={{flexShrink:0,background:C.card,border:`1px solid ${C.border}`,
+                    borderRadius:8,padding:'8px 10px',textAlign:'left',cursor:'pointer',
+                    maxWidth:148,minWidth:110}}>
+                  <div style={{fontSize:11,fontWeight:500,color:C.text,
+                    overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
+                    marginBottom:2}}>{r.name}</div>
+                  {r.brand&&<div style={{fontSize:10,color:C.faint,
+                    overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
+                    marginBottom:2}}>{r.brand}</div>}
+                  {r.kcal>0&&<div style={{fontSize:10,color:C.accent,fontWeight:500}}>
+                    {r.kcal} kcal</div>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
         <button style={ST.btn(C.water)} onClick={saveProduct}>Eintragen</button>
       </>}
     </>}
 
-    {/* ── WASSER ── */}
+    {/* ══════════════════════════ VERLAUF ══════════════════════════════════ */}
+    {tab==='verlauf'&&<>
+      {foodHistory.length===0?(
+        <div style={{textAlign:'center',padding:'28px 16px',color:C.faint,lineHeight:1.9}}>
+          <div style={{fontSize:28,marginBottom:8}}>🍽️</div>
+          <div style={{fontSize:12,color:C.muted}}>Noch keine Einträge gespeichert.</div>
+          <div style={{fontSize:11,marginTop:4}}>
+            Trage zuerst Produkte über den Suche-Tab ein.
+          </div>
+        </div>
+      ):(
+        <>
+          <div style={{fontSize:11,color:C.faint,marginBottom:10,lineHeight:1.6,
+            padding:'7px 10px',background:C.cardAlt,borderRadius:7,
+            border:`1px solid ${C.border}`}}>
+            💡 Tippe auf ein Produkt, um es mit gleicher Menge sofort einzutragen.
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:5}}>
+            {foodHistory.map(e=>{
+              const d = e.data;
+              const daysAgo = Math.round((Date.now()-e.ts)/(1000*60*60*24));
+              const when = daysAgo===0?'Heute':daysAgo===1?'Gestern':`vor ${daysAgo}d`;
+              return (
+                <button key={e.id} onClick={()=>quickAddHistory(e)}
+                  style={{width:'100%',background:C.cardAlt,border:`1px solid ${C.border}`,
+                    borderRadius:8,padding:'10px 12px',textAlign:'left',cursor:'pointer',
+                    display:'flex',alignItems:'center',gap:10}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',
+                      textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.productName}</div>
+                    <div style={{display:'flex',gap:7,marginTop:3,alignItems:'center',flexWrap:'wrap'}}>
+                      <span style={{fontSize:10,color:C.muted,background:`${C.border}60`,
+                        borderRadius:4,padding:'1px 5px'}}>
+                        {d.quantity}{d.unit}
+                      </span>
+                      {d.calories>0&&<span style={{fontSize:10,color:C.accent,fontWeight:600}}>
+                        {d.calories} kcal</span>}
+                      {d.protein>0&&<span style={{fontSize:10,color:C.sport}}>
+                        {d.protein}g P</span>}
+                      {d.mealTag&&<span style={{fontSize:10,color:C.muted}}>{d.mealTag}</span>}
+                      <span style={{fontSize:10,color:C.faint,marginLeft:'auto'}}>{when}</span>
+                    </div>
+                  </div>
+                  <div style={{flexShrink:0,width:30,height:30,borderRadius:7,
+                    background:`${C.water}18`,border:`1px solid ${C.water}35`,
+                    display:'flex',alignItems:'center',justifyContent:'center',
+                    fontSize:18,color:C.water,fontWeight:300}}>+</div>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </>}
+
+    {/* ══════════════════════════ WASSER ═══════════════════════════════════ */}
     {tab==='wasser'&&<>
       <label style={ST.lbl}>Wasser (ml)</label>
       <input style={ST.inp} type="number" inputMode="numeric" placeholder="0"
@@ -1988,7 +2145,7 @@ function ErnaehrungForm({ add, initialData, onSave, onClose }) {
       <button style={ST.btn(C.water)} onClick={saveWasser}>Speichern</button>
     </>}
 
-    {/* ── MANUELL ── */}
+    {/* ══════════════════════════ MANUELL ══════════════════════════════════ */}
     {tab==='manuell'&&<>
       <label style={ST.lbl}>Produktname</label>
       <input style={ST.inp} placeholder="z.B. Hausgemachte Pizza"
@@ -5254,7 +5411,7 @@ function App() {
             {activeForm==='gewicht'    && <GewichtForm    add={add} settings={settings} dismissed={dismissed} onDismiss={dismiss}/>}
             {activeForm==='sport'      && <SportForm      add={add} dismissed={dismissed} onDismiss={dismiss}/>}
             {activeForm==='stimmung'   && <StimmungForm   add={add} dismissed={dismissed} onDismiss={dismiss}/>}
-            {activeForm==='ernaehrung' && <ErrorBoundary><ErnaehrungForm add={add}/></ErrorBoundary>}
+            {activeForm==='ernaehrung' && <ErrorBoundary><ErnaehrungForm add={add} entries={entries}/></ErrorBoundary>}
             {activeForm==='schlaf'     && <SchlafForm     add={add} dismissed={dismissed} onDismiss={dismiss}/>}
             {activeForm==='schritte'   && <SchrittForm    add={add} dismissed={dismissed} onDismiss={dismiss}/>}
             {activeForm==='herz'        && <HerzForm       add={add} dismissed={dismissed} onDismiss={dismiss}/>}
@@ -6143,7 +6300,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v5.8</span>
+          <span>v5.9</span>
         </div>
       </header>
 
@@ -6171,7 +6328,7 @@ function App() {
             {editing.type==='gewicht'    && <GewichtForm    add={add} settings={settings} initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
             {editing.type==='sport'      && <SportForm      add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
             {editing.type==='stimmung'   && <StimmungForm   add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
-            {editing.type==='ernaehrung' && <ErrorBoundary><ErnaehrungForm add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/></ErrorBoundary>}
+            {editing.type==='ernaehrung' && <ErrorBoundary><ErnaehrungForm add={add} entries={entries}                    initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/></ErrorBoundary>}
             {editing.type==='schlaf'     && <SchlafForm     add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
             {editing.type==='schritte'   && <SchrittForm    add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/> }
             {editing.type==='herz'        && <HerzForm       add={add}                     initialData={editing.data} onSave={d=>updateEntry(editing.id,d)} onClose={()=>setEditing(null)}/>}
@@ -6204,7 +6361,7 @@ function App() {
             {journalAdd.type==='gewicht'    && <GewichtForm    add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} settings={settings} onSave={null} onClose={()=>setJournalAdd(null)}/>}
             {journalAdd.type==='sport'      && <SportForm      add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/>}
             {journalAdd.type==='stimmung'   && <StimmungForm   add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/>}
-            {journalAdd.type==='ernaehrung' && <ErrorBoundary><ErnaehrungForm add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/></ErrorBoundary>}
+            {journalAdd.type==='ernaehrung' && <ErrorBoundary><ErnaehrungForm add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} entries={entries} onSave={null} onClose={()=>setJournalAdd(null)}/></ErrorBoundary>}
             {journalAdd.type==='schlaf'     && <SchlafForm     add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/>}
             {journalAdd.type==='schritte'   && <SchrittForm    add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/>}
             {journalAdd.type==='herz'       && <HerzForm       add={(t,d)=>{add(t,d,journalAdd.date);setJournalAdd(null);}} onSave={null} onClose={()=>setJournalAdd(null)}/>}
