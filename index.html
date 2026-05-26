@@ -4466,6 +4466,7 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
   const [editSec,  setEditSec]  = useState(null);   // Bearbeitungsmodus: welche Sektion?
   const [draft,    setDraft]    = useState({});      // Temporäre Änderungen (nicht persistiert)
   const [saved,    setSaved]    = useState(null);    // Speichern-Feedback: id der Sektion
+  const [showKcalCalc, setShowKcalCalc] = useState(false); // Kalorienrechner-Panel
 
   // Sektion öffnen/schließen; beim Öffnen editSec zurücksetzen
   const toggleSec = (id) => {
@@ -4473,10 +4474,12 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
       setOpenSec(null);
       setEditSec(null);
       setDraft({});
+      setShowKcalCalc(false);
     } else {
       setOpenSec(id);
       setEditSec(null);
       setDraft({});
+      setShowKcalCalc(false);
     }
   };
 
@@ -4659,7 +4662,7 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
         { label:'Einträge gesamt',  value: String(totalEntries) },
         { label:'Tage getrackt',    value: String(trackingDays) },
         { label:'Metriken aktiv',   value: String(Object.keys(METRICS).filter(k=>entries.some(e=>e.type===k)).length) },
-        { label:'Version',          value: 'v5.6' },
+        { label:'Version',          value: 'v6.0' },
         { label:'Speicher',         value: 'localStorage · lokal' },
       ],
       readOnly: true,
@@ -4767,27 +4770,7 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
       );
     }
 
-    // Standard: number / text
-    return (
-      <div key={field.key} style={{marginBottom:14}}>
-        <label style={ST.lbl}>{field.label}</label>
-        <input
-          style={{...ST.inp,marginBottom:0}}
-          type={field.type}
-          inputMode={field.mode||undefined}
-          step={field.step||undefined}
-          placeholder={field.placeholder||''}
-          value={draft[field.key] != null ? draft[field.key] : (settings[field.key] ?? '')}
-          onChange={e=>{
-            const raw = e.target.value;
-            const val = field.type==='number' ? (raw===''?null:(+raw||0)) : raw;
-            setDraft(dr=>({...dr,[field.key]:val}));
-          }}
-        />
-      </div>
-    );
-
-    // ── Auto-Makro-Button (nur im Profil Ernährungsziele) ──────────────────
+    // ── Auto-Makro-Button (wird im Ernährungs-Bearbeitungsmodus angezeigt) ───
     if (field.type === 'auto_macro_btn') {
       const kcal = +(draft.kalorienZiel ?? settings.kalorienZiel ?? 2000);
       const w    = lastWeight || settings.startWeight;
@@ -4835,6 +4818,26 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
         </div>
       );
     }
+
+    // Standard: number / text
+    return (
+      <div key={field.key} style={{marginBottom:14}}>
+        <label style={ST.lbl}>{field.label}</label>
+        <input
+          style={{...ST.inp,marginBottom:0}}
+          type={field.type}
+          inputMode={field.mode||undefined}
+          step={field.step||undefined}
+          placeholder={field.placeholder||''}
+          value={draft[field.key] != null ? draft[field.key] : (settings[field.key] ?? '')}
+          onChange={e=>{
+            const raw = e.target.value;
+            const val = field.type==='number' ? (raw===''?null:(+raw||0)) : raw;
+            setDraft(dr=>({...dr,[field.key]:val}));
+          }}
+        />
+      </div>
+    );
   };
 
   // ── Render-Helfer: View-Zeile ─────────────────────────────────────────────
@@ -4987,14 +4990,54 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
 
                       {/* Bearbeiten-Button (nur wenn Sektion nicht read-only) */}
                       {!sec.readOnly && (
-                        <button onClick={()=>startEdit(sec.id)}
-                          style={{marginTop:14,width:'100%',background:`${sec.color}14`,
-                            border:`1px solid ${sec.color}40`,borderRadius:8,
-                            padding:'10px 0',fontSize:13,fontWeight:500,
-                            color:sec.color,cursor:'pointer',fontFamily:'inherit',
-                            letterSpacing:0.2}}>
-                          ✎ Bearbeiten
-                        </button>
+                        <>
+                          <button onClick={()=>startEdit(sec.id)}
+                            style={{marginTop:14,width:'100%',background:`${sec.color}14`,
+                              border:`1px solid ${sec.color}40`,borderRadius:8,
+                              padding:'10px 0',fontSize:13,fontWeight:500,
+                              color:sec.color,cursor:'pointer',fontFamily:'inherit',
+                              letterSpacing:0.2}}>
+                            ✎ Bearbeiten
+                          </button>
+
+                          {/* ── Kalorienrechner nur für Ernährungsziele ── */}
+                          {sec.id === 'ziele_ern' && (
+                            <>
+                              <button
+                                onClick={()=>setShowKcalCalc(s=>!s)}
+                                style={{marginTop:8,width:'100%',
+                                  background: showKcalCalc ? `${C.accent}20` : 'transparent',
+                                  border:`1px solid ${showKcalCalc ? C.accent : C.border}`,
+                                  borderRadius:8,padding:'10px 0',fontSize:13,fontWeight:500,
+                                  color: showKcalCalc ? C.accent : C.muted,
+                                  cursor:'pointer',fontFamily:'inherit',letterSpacing:0.2,
+                                  transition:'all 0.2s'}}>
+                                {showKcalCalc ? '✕ Rechner schließen' : '🧮 Kalorienrechner öffnen'}
+                              </button>
+                              {showKcalCalc && (
+                                <div style={{marginTop:14,paddingTop:14,
+                                  borderTop:`1px solid ${C.border}`}}>
+                                  <div style={{fontSize:10,color:C.accent,letterSpacing:0.8,
+                                    textTransform:'uppercase',marginBottom:12,fontWeight:600}}>
+                                    Kalorienbedarf berechnen
+                                  </div>
+                                  <KalorienRechner
+                                    settings={settings}
+                                    lastWeight={lastWeight}
+                                    onSave={kcal=>{
+                                      setSettings(s=>({...s,kalorienZiel:kcal}));
+                                      setShowKcalCalc(false);
+                                      // Kurzes Feedback in der Sektion
+                                      setSaved(sec.id);
+                                      setTimeout(()=>setSaved(null), 2000);
+                                    }}
+                                    onUpdateSettings={updates=>setSettings(s=>({...s,...updates}))}
+                                  />
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </>
                       )}
                     </>
                   )}
@@ -5052,7 +5095,6 @@ function App() {
   const [customFrom,setCF]     = useState('');
   const [customTo,  setCT]     = useState('');
   const [editing,setEditing]   = useState(null);
-  const [showKcalCalc,setShowKcalCalc] = useState(false);
   const [journalAdd,setJournalAdd] = useState(null);
   const [showProfile,setShowProfile] = useState(false);
 
@@ -5432,39 +5474,17 @@ function App() {
           onChange={e=>setHV(e.target.value)}
           onBlur={()=>setSettings(s=>({...s,height:+heightVal||175}))}
         />
-        <div style={{fontSize:11,color:C.muted,marginTop:-8}}>Wird für BMI-Berechnung verwendet</div>
-      </div>
-
-      <div style={{...ST.card,marginTop:4}}>
-        <div style={{fontSize:11,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:12}}>Tagesziele</div>
-
-        {/* Kalorienziel */}
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-          <label style={{...ST.lbl,marginBottom:0}}>Kalorienziel (kcal/Tag)</label>
-          <button onClick={()=>setShowKcalCalc(s=>!s)}
-            style={{fontSize:11,padding:'3px 10px',borderRadius:6,
-              border:`1px solid ${C.accent}44`,background:`${C.accent}14`,
-              color:C.accent,cursor:'pointer'}}>
-            {showKcalCalc?'Schließen':'Berechnen'}
-          </button>
+        <div style={{fontSize:11,color:C.muted,marginTop:-8,marginBottom:2}}>Wird für BMI-Berechnung verwendet</div>
+        <div style={{marginTop:12,padding:'10px 12px',background:`${C.accent}0A`,
+          border:`1px solid ${C.accent}20`,borderRadius:8,
+          display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:18,flexShrink:0}}>⚙️</span>
+          <div style={{fontSize:11,color:C.faint,lineHeight:1.6}}>
+            Tagesziele (Kalorien, Makros, Wasser) werden jetzt im{' '}
+            <span style={{color:C.accent,fontWeight:600}}>Profil</span>{' '}
+            verwaltet — oben rechts auf den Avatar tippen.
+          </div>
         </div>
-        {showKcalCalc
-          ? <KalorienRechner
-              settings={settings}
-              lastWeight={entries.filter(e=>e.type==='gewicht').at(0)?.data.weight}
-              onSave={v=>{setSettings(s=>({...s,kalorienZiel:v}));setShowKcalCalc(false);}}
-              onUpdateSettings={updates=>setSettings(s=>({...s,...updates}))}/>
-          : <input style={ST.inp} type="number" inputMode="numeric"
-              value={settings.kalorienZiel||2000}
-              onChange={e=>setSettings(s=>({...s,kalorienZiel:+e.target.value||2000}))}/>
-        }
-
-        {/* Wasserziel */}
-        <label style={ST.lbl}>Wasserziel (ml/Tag)</label>
-        <input style={ST.inp} type="number" inputMode="numeric"
-          value={settings.wasserZiel||2000}
-          onChange={e=>setSettings(s=>({...s,wasserZiel:+e.target.value||2000}))}/>
-        <div style={{fontSize:11,color:C.muted,marginTop:-8}}>Werden im Dashboard als Fortschrittsbalken angezeigt</div>
       </div>
     </>;
   }
@@ -6300,7 +6320,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v5.9</span>
+          <span>v6.0</span>
         </div>
       </header>
 
