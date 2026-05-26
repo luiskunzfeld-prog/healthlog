@@ -405,8 +405,15 @@ const CHART_COLORS = [
 
 function ChartCard({ title, color, empty, stat, children, chartId, chartOpts, onOptsChange, avgVal }) {
   const [open, setOpen] = useState(false);
-  const opts = chartOpts || { type: null, color: null, showAvg: false };
-  const activeColor = opts.color || color;
+  // draftOpts: temporärer Bearbeitungs-State — wird erst beim Speichern übernommen
+  const [draftOpts, setDraftOpts] = useState(null);
+
+  // Gespeicherte Optionen (aus settings)
+  const savedOpts = chartOpts || { type: null, color: null, showAvg: false };
+  // Aktive Optionen: im Edit-Modus der Draft, sonst die gespeicherten
+  const opts = open && draftOpts ? draftOpts : savedOpts;
+  // Farbe im Header zeigt immer die gespeicherte Farbe (kein Live-Preview im Header)
+  const activeColor = savedOpts.color || color;
 
   const TYPES = [
     { id: null,   label: 'Standard' },
@@ -415,7 +422,29 @@ function ChartCard({ title, color, empty, stat, children, chartId, chartOpts, on
     { id: 'area', label: 'Fläche'   },
   ];
 
-  const set = (patch) => onOptsChange && onOptsChange({ ...opts, ...patch });
+  // Panel öffnen → Draft mit aktuellen gespeicherten Werten initialisieren
+  const handleToggle = () => {
+    if (!open) {
+      setDraftOpts({ type: null, color: null, showAvg: false, ...savedOpts });
+    }
+    setOpen(o => !o);
+  };
+
+  // Änderungen nur im Draft speichern (kein sofortiges Persistieren)
+  const set = (patch) => setDraftOpts(d => ({ ...(d || savedOpts), ...patch }));
+
+  // Explizites Speichern → Draft in settings übernehmen
+  const handleSave = () => {
+    onOptsChange && onOptsChange(draftOpts);
+    setOpen(false);
+    setDraftOpts(null);
+  };
+
+  // Abbrechen → Draft verwerfen, Panel schließen
+  const handleCancel = () => {
+    setDraftOpts(null);
+    setOpen(false);
+  };
 
   return (
     <div style={{ ...ST.card, marginBottom:16, padding:'16px 16px 12px' }}>
@@ -428,7 +457,7 @@ function ChartCard({ title, color, empty, stat, children, chartId, chartOpts, on
         <div style={{display:'flex',gap:6,alignItems:'center'}}>
           {stat && <div style={ST.pill(activeColor)}>{stat}</div>}
           {chartId && (
-            <button onClick={()=>setOpen(o=>!o)}
+            <button onClick={handleToggle}
               style={{background:open?`${C.accent}15`:'transparent',border:`1px solid ${open?C.accent:C.border}`,
                 borderRadius:6,padding:'3px 8px',fontSize:10,color:open?C.accent:C.faint,
                 cursor:'pointer',letterSpacing:0.4,fontFamily:'inherit'}}>
@@ -438,10 +467,10 @@ function ChartCard({ title, color, empty, stat, children, chartId, chartOpts, on
         </div>
       </div>
 
-      {/* ── Settings Panel ── */}
+      {/* ── Settings Panel (Draft-Modus) ── */}
       {open && chartId && (
         <div style={{background:C.cardAlt,borderRadius:10,padding:'14px',marginBottom:14,
-          border:`1px solid ${C.border}`}}>
+          border:`1px solid ${C.accent}44`}}>
 
           {/* Diagramm-Typ */}
           <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:8}}>
@@ -491,7 +520,7 @@ function ChartCard({ title, color, empty, stat, children, chartId, chartOpts, on
             ))}
           </div>
           {/* Hex + Color Picker */}
-          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:14}}>
             <div style={{position:'relative',flexShrink:0}}>
               <input type="color" value={opts.color||color}
                 onChange={e=>set({color:e.target.value})}
@@ -509,6 +538,20 @@ function ChartCard({ title, color, empty, stat, children, chartId, chartOpts, on
               Reset
             </button>
           </div>
+
+          {/* ── Speichern / Abbrechen ── */}
+          <div style={{display:'flex',gap:8,marginTop:4}}>
+            <button onClick={handleCancel}
+              style={{flex:1,background:'transparent',color:C.muted,border:`1px solid ${C.border}`,
+                borderRadius:8,padding:'9px 0',fontSize:13,fontWeight:500,cursor:'pointer',fontFamily:'inherit'}}>
+              Abbrechen
+            </button>
+            <button onClick={handleSave}
+              style={{flex:2,background:C.accent,color:C.bg,border:'none',
+                borderRadius:8,padding:'9px 0',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+              Speichern
+            </button>
+          </div>
         </div>
       )}
 
@@ -521,11 +564,13 @@ function ChartCard({ title, color, empty, stat, children, chartId, chartOpts, on
 
 // ── DatePicker Feld (nur für neue Einträge) ───────────────────────────────────
 function DatePickerField({ value, onChange }) {
-  return <>
-    <label style={ST.lbl}>Datum</label>
-    <input type="date" style={ST.datePicker} value={value}
-      max={toDay()} onChange={e=>onChange(e.target.value)} />
-  </>;
+  return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',marginBottom:4}}>
+      <label style={{...ST.lbl,textAlign:'center',width:'100%'}}>Datum</label>
+      <input type="date" style={{...ST.datePicker,width:'auto',minWidth:180,textAlign:'center',marginBottom:12}}
+        value={value} max={toDay()} onChange={e=>onChange(e.target.value)} />
+    </div>
+  );
 }
 
 // ── Forms ─────────────────────────────────────────────────────────────────────
@@ -3617,7 +3662,7 @@ function App() {
             <div style={ST.secttl}>Über HealthLog</div>
             <div style={ST.card}>
               {[
-                ['Version',    'v5.1'],
+                ['Version',    'v5.2'],
                 ['Plattform',  'PWA · Offline-fähig'],
                 ['Datenspeicher', 'localStorage (lokal)'],
                 ['Diagramme',  'Chart.js 4.4'],
