@@ -564,6 +564,376 @@ function ChartCard({ title, color, empty, stat, children, chartId, chartOpts, on
   );
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// KORRELATIONS-ENGINE
+//
+// Algorithmus: Pearson-Korrelationskoeffizient (r)
+//   r =  Σ[(xi − x̄)(yi − ȳ)]  /  √[Σ(xi−x̄)² · Σ(yi−ȳ)²]
+//
+//   r = +1.0  perfekte positive Korrelation
+//   r = -1.0  perfekte negative Korrelation
+//   r =  0.0  keine lineare Korrelation
+//
+// Signifikanz-Schwellen (konservativ, da n meist < 100):
+//   |r| >= 0.5  → stark    (signifikant ab n ≥ 7)
+//   |r| >= 0.3  → mittel   (signifikant ab n ≥ 10)
+//   |r| >= 0.15 → schwach  (nur info, ab n ≥ 20)
+//   n < 7       → zu wenig Daten, nicht zeigen
+//
+// Ziel-Variablen (Y): mood, energy, stress
+// Prädiktor-Variablen (X): alle anderen messbaren Tageswerte
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Faktor-Definitionen ───────────────────────────────────────────────────────
+const CORR_FACTORS = {
+  mood:         { label:'Stimmung',        unit:'/10',  color:'#A09080', group:'mental'  },
+  energy:       { label:'Energie',          unit:'/10',  color:'#9A8462', group:'mental'  },
+  stress:       { label:'Stress',           unit:'/10',  color:'#B87060', group:'mental'  },
+  sleepHours:   { label:'Schlafdauer',      unit:'Std',  color:'#8A7E96', group:'schlaf'  },
+  sleepQuality: { label:'Schlafqualität',   unit:'/5',   color:'#9A8EB0', group:'schlaf'  },
+  sportMinutes: { label:'Sport',            unit:'min',  color:'#9A8462', group:'aktivität'},
+  calories:     { label:'Kalorien',         unit:'kcal', color:'#C8B89A', group:'ernährung'},
+  protein:      { label:'Eiweiß',           unit:'g',    color:'#9A8462', group:'ernährung'},
+  carbs:        { label:'Kohlenhydrate',    unit:'g',    color:'#B4ACA0', group:'ernährung'},
+  fat:          { label:'Fett',             unit:'g',    color:'#A09080', group:'ernährung'},
+  water:        { label:'Wasser',           unit:'ml',   color:'#B4ACA0', group:'ernährung'},
+  steps:        { label:'Schritte',         unit:'',     color:'#7A9080', group:'aktivität'},
+  heartRate:    { label:'Herzfrequenz',     unit:'bpm',  color:'#D07878', group:'vitalwerte'},
+  weight:       { label:'Gewicht',          unit:'kg',   color:'#C8B89A', group:'körper'  },
+};
+
+// Die Ziel-Variablen für Korrelationsberechnung
+const CORR_TARGETS = ['mood','energy','stress'];
+
+// ── Pearson-Korrelationskoeffizient ──────────────────────────────────────────
+// Gibt r ∈ [-1, 1] zurück oder null bei zu wenig Daten / konstanten Werten
+function pearson(xs, ys) {
+  const n = xs.length;
+  if (n < 7) return null;
+  // Mittelwerte
+  const mx = xs.reduce((a,b)=>a+b,0) / n;
+  const my = ys.reduce((a,b)=>a+b,0) / n;
+  // Kovarianz und Varianzen
+  let num=0, dx2=0, dy2=0;
+  for (let i=0; i<n; i++) {
+    const dx=xs[i]-mx, dy=ys[i]-my;
+    num += dx*dy;
+    dx2 += dx*dx;
+    dy2 += dy*dy;
+  }
+  const denom = Math.sqrt(dx2 * dy2);
+  if (denom === 0) return null; // konstante Variable → keine Aussage möglich
+  return +(num / denom).toFixed(3);
+}
+
+// ── Tages-Matrix aufbauen ────────────────────────────────────────────────────
+// Gibt Map<date, {mood, energy, stress, sleepHours, ...}> zurück
+// Nur Tage wo der Zielwert (mood/energy/stress) vorhanden ist, sind relevant
+function buildDailyMatrix(entries) {
+  const map = {}; // date → factor values
+
+  const ensure = (date) => {
+    if (!map[date]) map[date] = {};
+    return map[date];
+  };
+
+  entries.forEach(e => {
+    const d = e.data;
+    const row = ensure(e.date);
+    switch(e.type) {
+      case 'stimmung':
+        row.mood   = d.mood;
+        row.energy = d.energy;
+        row.stress = d.stress;
+        break;
+      case 'schlaf':
+        row.sleepHours   = d.hours;
+        row.sleepQuality = d.quality;
+        break;
+      case 'sport':
+        row.sportMinutes = (row.sportMinutes||0) + (d.duration||0);
+        break;
+      case 'ernaehrung':
+        row.calories = (row.calories||0) + (d.calories||0);
+        row.protein  = (row.protein||0)  + (d.protein||0);
+        row.carbs    = (row.carbs||0)    + (d.carbs||0);
+        row.fat      = (row.fat||0)      + (d.fat||0);
+        row.water    = (row.water||0)    + (d.water||0);
+        break;
+      case 'schritte':
+        row.steps = (row.steps||0) + (d.steps||0);
+        break;
+      case 'herz':
+        // Durchschnitt über mehrere BPM-Messungen am gleichen Tag
+        row._herzN = (row._herzN||0) + 1;
+        row.heartRate = ((row.heartRate||0) * (row._herzN-1) + d.bpm) / row._herzN;
+        break;
+      case 'gewicht':
+        row.weight = d.weight;
+        break;
+    }
+  });
+
+  return map;
+}
+
+// ── Alle Korrelationen berechnen ─────────────────────────────────────────────
+// Gibt Array von {target, factor, r, n, pairs} sortiert nach |r| absteigend
+function computeAllCorrelations(matrix) {
+  const dates = Object.keys(matrix);
+  const results = [];
+
+  const factorKeys = Object.keys(CORR_FACTORS).filter(k => !CORR_TARGETS.includes(k));
+
+  CORR_TARGETS.forEach(target => {
+    factorKeys.forEach(factor => {
+      // Nur Tage nehmen wo BEIDE Werte vorhanden sind
+      const pairs = dates
+        .filter(d => matrix[d][target] != null && matrix[d][factor] != null)
+        .map(d => ({ x: matrix[d][factor], y: matrix[d][target], date: d }));
+
+      if (pairs.length < 7) return;
+
+      const xs = pairs.map(p=>p.x);
+      const ys = pairs.map(p=>p.y);
+      const r = pearson(xs, ys);
+      if (r === null) return;
+      if (Math.abs(r) < 0.15) return; // Schwelle: zu schwach um interessant zu sein
+
+      results.push({ target, factor, r, n: pairs.length, pairs });
+    });
+  });
+
+  // Sortieren nach Stärke der Korrelation
+  return results.sort((a,b) => Math.abs(b.r) - Math.abs(a.r));
+}
+
+// ── Insight-Text generieren ───────────────────────────────────────────────────
+// Vergleich: obere vs. untere Hälfte des Faktors → Prozentdifferenz im Zielwert
+function generateInsightText(corr, matrix) {
+  const { target, factor, r, pairs } = corr;
+  const tLabel = CORR_FACTORS[target].label;
+  const fLabel = CORR_FACTORS[factor].label;
+  const fUnit  = CORR_FACTORS[factor].unit;
+
+  // Median des Faktors berechnen
+  const sorted = [...pairs].sort((a,b)=>a.x-b.x);
+  const mid = Math.floor(sorted.length / 2);
+  const medianX = sorted.length % 2 === 0
+    ? (sorted[mid-1].x + sorted[mid].x) / 2
+    : sorted[mid].x;
+
+  const low  = pairs.filter(p=>p.x <= medianX);
+  const high = pairs.filter(p=>p.x >  medianX);
+  if (!low.length || !high.length) return null;
+
+  const avgLow  = +(low.reduce((s,p)=>s+p.y,0)  / low.length).toFixed(1);
+  const avgHigh = +(high.reduce((s,p)=>s+p.y,0) / high.length).toFixed(1);
+
+  // Prozentuale Differenz (relativ zum Gesamtdurchschnitt)
+  const totalAvg = +(pairs.reduce((s,p)=>s+p.y,0) / pairs.length).toFixed(1);
+  const diffPct = totalAvg > 0 ? Math.abs(Math.round(((avgHigh - avgLow) / totalAvg) * 100)) : 0;
+
+  // Medianwert formatieren
+  const medFmt = medianX >= 1000
+    ? `${(medianX/1000).toFixed(1)}k` : medianX < 10
+    ? medianX.toFixed(1) : Math.round(medianX);
+
+  // Richtungslogik: Stress ist negativ, also invertieren
+  const targetIsNeg = target === 'stress';
+
+  if (r > 0) {
+    // Positiver Zusammenhang: mehr X → mehr Y
+    const moreIsBetter = !targetIsNeg; // mehr Stimmung/Energie = gut; mehr Stress = schlecht
+    return {
+      headline: `Mehr ${fLabel} → ${moreIsBetter ? 'bessere' : 'höhere'} ${tLabel}`,
+      body: `An Tagen mit viel ${fLabel} (>${medFmt}${fUnit ? ' '+fUnit : ''}) liegt deine ${tLabel} im Schnitt bei ${avgHigh}/10 — vs. ${avgLow}/10 an weniger aktiven Tagen (+${diffPct}%).`,
+      positive: moreIsBetter,
+    };
+  } else {
+    // Negativer Zusammenhang: mehr X → weniger Y
+    const moreIsBetter = targetIsNeg; // weniger Stress ist besser
+    return {
+      headline: `Weniger ${fLabel} → ${moreIsBetter ? 'bessere' : 'schlechtere'} ${tLabel}`,
+      body: `An Tagen mit wenig ${fLabel} (≤${medFmt}${fUnit ? ' '+fUnit : ''}) liegt deine ${tLabel} im Schnitt bei ${avgLow}/10 — ${diffPct}% ${moreIsBetter ? 'besser' : 'schlechter'} als an aktiveren Tagen.`,
+      positive: moreIsBetter,
+    };
+  }
+}
+
+// ── r-Wert Hilfsfunktionen ────────────────────────────────────────────────────
+function rStrength(r) {
+  const a = Math.abs(r);
+  if (a >= 0.6) return 'stark';
+  if (a >= 0.4) return 'mittel';
+  if (a >= 0.2) return 'schwach';
+  return 'sehr schwach';
+}
+
+function rColorScale(r) {
+  const a = Math.abs(r);
+  if (r > 0) {
+    if (a >= 0.5) return '#7A9A7A';  // strong positive → green
+    if (a >= 0.3) return '#9AB890';  // medium positive
+    return '#B4C8B4';                 // weak positive
+  } else {
+    if (a >= 0.5) return '#B87060';  // strong negative → red
+    if (a >= 0.3) return '#C8907A';  // medium negative
+    return '#C8B0A8';                 // weak negative
+  }
+}
+
+// ── Scatter Chart Komponente (Chart.js scatter type) ─────────────────────────
+function ScatterChart({ pairs, targetLabel, factorLabel, factorUnit, r }) {
+  const ref  = useRef(null);
+  const inst = useRef(null);
+  const col  = r >= 0 ? '#7A9A7A' : '#B87060';
+
+  useEffect(() => {
+    if (!ref.current) return;
+    if (inst.current) { inst.current.destroy(); inst.current = null; }
+
+    // Regressionsgerade berechnen (lineare Regression y = a + bx)
+    const n = pairs.length;
+    const mx = pairs.reduce((s,p)=>s+p.x,0)/n;
+    const my = pairs.reduce((s,p)=>s+p.y,0)/n;
+    let num=0, denom=0;
+    pairs.forEach(p=>{ num+=(p.x-mx)*(p.y-my); denom+=(p.x-mx)**2; });
+    const slope = denom ? num/denom : 0;
+    const intercept = my - slope*mx;
+    const xMin = Math.min(...pairs.map(p=>p.x));
+    const xMax = Math.max(...pairs.map(p=>p.x));
+    const regLine = [{x:xMin, y:slope*xMin+intercept},{x:xMax, y:slope*xMax+intercept}];
+
+    inst.current = new Chart(ref.current, {
+      type: 'scatter',
+      data: {
+        datasets: [
+          {
+            label: `${factorLabel} vs ${targetLabel}`,
+            data: pairs.map(p=>({x:p.x, y:p.y})),
+            backgroundColor: col+'99',
+            borderColor: col,
+            borderWidth: 1,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+          },
+          {
+            label: 'Regressionsgerade',
+            data: regLine,
+            type: 'line',
+            borderColor: col+'AA',
+            borderWidth: 1.5,
+            borderDash: [5,4],
+            pointRadius: 0,
+            fill: false,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 200 },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: C.cardAlt,
+            borderColor: C.border,
+            borderWidth: 1,
+            titleColor: C.muted,
+            bodyColor: C.text,
+            callbacks: {
+              label: ctx => `${factorLabel}: ${ctx.raw.x}${factorUnit?' '+factorUnit:''}, ${targetLabel}: ${ctx.raw.y}/10`
+            }
+          }
+        },
+        scales: {
+          x: {
+            title: { display:true, text:factorLabel+(factorUnit?' ('+factorUnit+')':''), color:C.muted, font:{size:10} },
+            grid: { color:C.border+'66', drawTicks:false },
+            ticks: { color:C.muted, font:{size:10} },
+            border: { display:false },
+          },
+          y: {
+            title: { display:true, text:targetLabel+' (1–10)', color:C.muted, font:{size:10} },
+            grid: { color:C.border+'66', drawTicks:false },
+            ticks: { color:C.muted, font:{size:10} },
+            border: { display:false },
+            min: 1, max: 10,
+          }
+        }
+      }
+    });
+    return () => { inst.current?.destroy(); inst.current = null; };
+  }, [pairs, r]);
+
+  return (
+    <div style={{position:'relative', width:'100%', height:'220px'}}>
+      <canvas ref={ref} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
+    </div>
+  );
+}
+
+// ── Korrelationsmatrix (Heatmap) ──────────────────────────────────────────────
+function CorrelationMatrix({ correlations }) {
+  const targets  = CORR_TARGETS;
+  const factors  = [...new Set(correlations.map(c=>c.factor))].slice(0,8);
+  if (!factors.length) return null;
+
+  // Lookup r für (target, factor)
+  const rMap = {};
+  correlations.forEach(c=>{ rMap[`${c.target}|${c.factor}`] = c.r; });
+
+  return (
+    <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch',marginBottom:2}}>
+      <table style={{borderCollapse:'collapse',minWidth:'100%',fontSize:10}}>
+        <thead>
+          <tr>
+            <th style={{width:80,textAlign:'right',paddingRight:6,color:C.faint,fontWeight:400}}></th>
+            {targets.map(t=>(
+              <th key={t} style={{padding:'0 4px 6px',textAlign:'center',
+                color:CORR_FACTORS[t].color,fontWeight:600,fontSize:10,
+                letterSpacing:0.4,textTransform:'uppercase',whiteSpace:'nowrap'}}>
+                {CORR_FACTORS[t].label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {factors.map(f=>(
+            <tr key={f}>
+              <td style={{textAlign:'right',paddingRight:8,paddingBottom:3,
+                color:C.muted,fontSize:10,fontWeight:500,whiteSpace:'nowrap'}}>
+                {CORR_FACTORS[f]?.label}
+              </td>
+              {targets.map(t=>{
+                const r = rMap[`${t}|${f}`];
+                const bg = r!=null ? rColorScale(r) : C.border;
+                const txt = r!=null ? (r>0?'+':'')+r.toFixed(2) : '–';
+                return (
+                  <td key={t} style={{padding:'3px 4px',textAlign:'center'}}>
+                    <div style={{
+                      width:44,height:28,borderRadius:6,
+                      background: r!=null ? bg+'30' : C.faint+'18',
+                      border:`1px solid ${r!=null ? bg+'60' : C.faint+'30'}`,
+                      display:'flex',alignItems:'center',justifyContent:'center',
+                      fontSize:10,fontWeight:r!=null?600:400,
+                      color: r!=null ? bg : C.faint,
+                      margin:'0 auto',
+                    }}>
+                      {txt}
+                    </div>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── DatePicker Feld (nur für neue Einträge) ───────────────────────────────────
 function DatePickerField({ value, onChange }) {
   return (
@@ -4356,8 +4726,249 @@ function App() {
     </>;
   }
 
+  // ── Insights ────────────────────────────────────────────────────────────────
+  function InsightsTab() {
+    const [selected, setSelected] = useState(null); // { corr } für Scatter-Popup
+    const [filterTarget, setFilterTarget] = useState('all');
+    const [minN, setMinN] = useState(7);
+
+    // ── Alle Berechnungen memoized ──────────────────────────────────────────
+    const matrix = useMemo(() => buildDailyMatrix(entries), [entries]);
+
+    const allCorrelations = useMemo(() => {
+      const raw = computeAllCorrelations(matrix);
+      return raw.filter(c => c.n >= minN);
+    }, [matrix, minN]);
+
+    const filteredCorr = useMemo(() =>
+      filterTarget === 'all'
+        ? allCorrelations
+        : allCorrelations.filter(c => c.target === filterTarget),
+      [allCorrelations, filterTarget]
+    );
+
+    // ── Anzahl Stimmungs-Einträge ───────────────────────────────────────────
+    const moodCount = useMemo(() =>
+      entries.filter(e=>e.type==='stimmung').length, [entries]);
+
+    // ── Minimum-Daten-Prüfung ───────────────────────────────────────────────
+    if (moodCount < 7) {
+      return (
+        <div style={{...ST.card,textAlign:'center',padding:'32px 20px'}}>
+          <div style={{fontSize:32,marginBottom:12}}>📊</div>
+          <div style={{fontFamily:"'DM Serif Display',Georgia,serif",fontSize:17,marginBottom:8,color:C.text}}>
+            Noch zu wenig Daten
+          </div>
+          <div style={{fontSize:12,color:C.muted,lineHeight:1.8,marginBottom:16}}>
+            Für aussagekräftige Korrelationen werden mindestens <strong style={{color:C.accent}}>7 Stimmungseinträge</strong> benötigt.<br/>
+            Aktuell: <strong style={{color:C.accent}}>{moodCount}</strong> Einträge
+          </div>
+          <div style={{fontSize:11,color:C.faint,lineHeight:1.6,padding:'10px 14px',
+            background:C.cardAlt,borderRadius:8,border:`1px solid ${C.border}`}}>
+            Tipp: Trage täglich Stimmung, Schlaf und Sport ein — nach einer Woche erscheinen hier automatisch deine persönlichen Insights.
+          </div>
+        </div>
+      );
+    }
+
+    const topInsights = filteredCorr.slice(0, 8);
+    const hasStrong = topInsights.some(c=>Math.abs(c.r)>=0.4);
+
+    return <>
+      {/* ── Header ── */}
+      <div style={{marginBottom:16}}>
+        <div style={{fontFamily:"'DM Serif Display',Georgia,serif",fontSize:18,fontWeight:400,marginBottom:4}}>
+          Deine Insights
+        </div>
+        <div style={{fontSize:11,color:C.muted,lineHeight:1.6}}>
+          Basierend auf <strong style={{color:C.accent}}>{moodCount} Stimmungseinträgen</strong> und {entries.length} Gesamteinträgen. Pearson r — je näher an ±1, desto stärker der Zusammenhang.
+        </div>
+      </div>
+
+      {/* ── Ziel-Filter ── */}
+      <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
+        {[['all','Alle'],['mood','Stimmung'],['energy','Energie'],['stress','Stress']].map(([v,l])=>(
+          <button key={v} onClick={()=>setFilterTarget(v)}
+            style={{padding:'5px 12px',borderRadius:6,fontSize:11,cursor:'pointer',fontFamily:'inherit',
+              border:`1px solid ${filterTarget===v?C.accent:C.border}`,
+              background:filterTarget===v?`${C.accent}18`:'transparent',
+              color:filterTarget===v?C.accent:C.muted,
+              fontWeight:filterTarget===v?600:400}}>
+            {l}
+          </button>
+        ))}
+        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6}}>
+          <span style={{fontSize:10,color:C.faint}}>Min. Tage:</span>
+          {[7,14,30].map(n=>(
+            <button key={n} onClick={()=>setMinN(n)}
+              style={{padding:'4px 8px',borderRadius:6,fontSize:10,cursor:'pointer',fontFamily:'inherit',
+                border:`1px solid ${minN===n?C.accent:C.border}`,
+                background:minN===n?`${C.accent}18`:'transparent',
+                color:minN===n?C.accent:C.muted}}>
+              {n}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Keine Korrelationen ── */}
+      {!topInsights.length && (
+        <div style={{...ST.card,textAlign:'center',padding:'24px',color:C.muted,fontSize:12}}>
+          Keine signifikanten Korrelationen bei ≥{minN} gemeinsamen Tagen.<br/>
+          Versuche es mit weniger Minimum-Tagen.
+        </div>
+      )}
+
+      {/* ── Insight-Karten ── */}
+      {topInsights.map((corr,i)=>{
+        const insight = generateInsightText(corr, matrix);
+        if (!insight) return null;
+        const tFact = CORR_FACTORS[corr.target];
+        const fFact = CORR_FACTORS[corr.factor];
+        const strength = rStrength(corr.r);
+        const rCol = rColorScale(corr.r);
+        const isPos = corr.r > 0;
+
+        return (
+          <div key={i} style={{...ST.card,marginBottom:10,padding:'14px 16px',
+            border:`1px solid ${rCol}30`,cursor:'pointer'}}
+            onClick={()=>setSelected(selected?.factor===corr.factor&&selected?.target===corr.target?null:corr)}>
+
+            {/* Insight-Header */}
+            <div style={{display:'flex',alignItems:'flex-start',gap:10,marginBottom:10}}>
+              {/* Strength-Indikator */}
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,flexShrink:0,paddingTop:2}}>
+                {[...Array(3)].map((_,j)=>(
+                  <div key={j} style={{width:3,height:3+j*2,borderRadius:1.5,
+                    background: j < (strength==='stark'?3:strength==='mittel'?2:1) ? rCol : C.faint}}/>
+                ))}
+              </div>
+
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4,flexWrap:'wrap'}}>
+                  <span style={{fontSize:12,fontWeight:600,color:C.text}}>{insight.headline}</span>
+                  <span style={{fontSize:10,padding:'1px 7px',borderRadius:10,
+                    background:`${rCol}20`,color:rCol,fontWeight:600,fontFamily:'monospace',flexShrink:0}}>
+                    r = {corr.r > 0 ? '+' : ''}{corr.r.toFixed(2)}
+                  </span>
+                </div>
+                <div style={{fontSize:11,color:C.muted,lineHeight:1.65}}>{insight.body}</div>
+              </div>
+
+              {/* Chevron */}
+              <div style={{flexShrink:0,color:C.faint,fontSize:14,paddingTop:2,
+                transform:selected?.factor===corr.factor&&selected?.target===corr.target?'rotate(90deg)':'rotate(0deg)',
+                transition:'transform 0.2s'}}>›</div>
+            </div>
+
+            {/* Badges */}
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              <span style={{fontSize:9,padding:'2px 7px',borderRadius:8,
+                background:`${tFact.color}18`,color:tFact.color,letterSpacing:0.4,textTransform:'uppercase'}}>
+                {tFact.label}
+              </span>
+              <span style={{fontSize:9,padding:'2px 7px',borderRadius:8,
+                background:`${fFact.color}18`,color:fFact.color,letterSpacing:0.4,textTransform:'uppercase'}}>
+                {fFact.label}
+              </span>
+              <span style={{fontSize:9,padding:'2px 7px',borderRadius:8,
+                background:C.cardAlt,color:C.faint,letterSpacing:0.4}}>
+                n={corr.n} Tage · {strength}
+              </span>
+            </div>
+
+            {/* ── Scatter-Plot (bei Klick aufklappen) ── */}
+            {selected?.factor===corr.factor&&selected?.target===corr.target && (
+              <div style={{marginTop:16,borderTop:`1px solid ${C.border}`,paddingTop:14}}>
+                {/* Split-Vergleich: untere vs. obere Hälfte */}
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
+                  {[
+                    {label:`Wenig ${fFact.label}`, side:'low'},
+                    {label:`Viel ${fFact.label}`,  side:'high'}
+                  ].map(({label,side})=>{
+                    const sorted = [...corr.pairs].sort((a,b)=>a.x-b.x);
+                    const mid = Math.floor(sorted.length/2);
+                    const half = side==='low' ? sorted.slice(0,mid) : sorted.slice(mid);
+                    const halfAvg = +(half.reduce((s,p)=>s+p.y,0)/half.length).toFixed(1);
+                    const pct = Math.round((halfAvg/10)*100);
+                    const col2 = side==='high' ? (isPos?C.success:C.danger) : (isPos?C.danger:C.success);
+                    return (
+                      <div key={side} style={{...ST.card,padding:'10px 12px',border:`1px solid ${col2}30`,background:`${col2}08`}}>
+                        <div style={{fontSize:9,color:C.muted,letterSpacing:0.5,textTransform:'uppercase',marginBottom:6}}>{label}</div>
+                        <div style={{fontSize:20,fontWeight:700,color:col2,lineHeight:1}}>{halfAvg}</div>
+                        <div style={{fontSize:9,color:C.faint,marginTop:2}}>{tFact.label}/10</div>
+                        {/* Mini-Fortschrittsbalken */}
+                        <div style={{marginTop:8,height:3,borderRadius:2,background:C.faint}}>
+                          <div style={{width:`${pct}%`,height:'100%',borderRadius:2,background:col2,transition:'width 0.4s'}}/>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Scatter Chart */}
+                <ScatterChart
+                  pairs={corr.pairs}
+                  targetLabel={tFact.label}
+                  factorLabel={fFact.label}
+                  factorUnit={fFact.unit}
+                  r={corr.r}
+                />
+                <div style={{fontSize:10,color:C.faint,textAlign:'center',marginTop:6,lineHeight:1.5}}>
+                  Jeder Punkt = 1 Tag · gestrichelte Linie = Regressionsgerade<br/>
+                  Pearson r = {corr.r>0?'+':''}{corr.r.toFixed(3)} · {corr.n} Datenpunkte
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* ── Korrelationsmatrix ── */}
+      {allCorrelations.length > 0 && (
+        <>
+          <div style={{...ST.secttl,marginTop:8}}>Korrelations­matrix</div>
+          <div style={{...ST.card,padding:'14px 12px'}}>
+            <div style={{fontSize:11,color:C.muted,marginBottom:12,lineHeight:1.6}}>
+              Alle Faktoren gegen Stimmung, Energie und Stress. Farbe zeigt Richtung und Stärke.
+            </div>
+            <CorrelationMatrix correlations={allCorrelations}/>
+            {/* Legende */}
+            <div style={{display:'flex',gap:8,marginTop:12,flexWrap:'wrap',justifyContent:'center'}}>
+              {[['#7A9A7A','Positiv stark'],['#9AB890','Positiv mittel'],['#C8B0A8','Negativ schwach'],['#C8907A','Negativ mittel'],['#B87060','Negativ stark']].map(([c,l])=>(
+                <div key={l} style={{display:'flex',alignItems:'center',gap:4,fontSize:9,color:C.muted}}>
+                  <div style={{width:10,height:10,borderRadius:2,background:c+'40',border:`1px solid ${c}80`}}/>
+                  {l}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Erklärungsbox ── */}
+      <div style={{...ST.card,marginTop:4,background:C.cardAlt,border:`1px solid ${C.border}`}}>
+        <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:8}}>Wie wird das berechnet?</div>
+        <div style={{fontSize:11,color:C.muted,lineHeight:1.8}}>
+          Die App berechnet den <strong style={{color:C.text}}>Pearson-Korrelationskoeffizienten r</strong> für alle Tage, an denen beide Werte vorhanden sind. r misst, wie stark zwei Variablen linear zusammenhängen — unabhängig von ihrer absoluten Größe.
+        </div>
+        <div style={{marginTop:8,display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+          {[['r ≥ 0.5','Starke Korrelation'],['r 0.3–0.5','Mittlere Korrelation'],['r 0.15–0.3','Schwache Korrelation'],['< 7 Tage','Nicht angezeigt']].map(([v,l])=>(
+            <div key={v} style={{fontSize:10,color:C.faint,lineHeight:1.5}}>
+              <span style={{color:C.text,fontWeight:500}}>{v}</span> — {l}
+            </div>
+          ))}
+        </div>
+        <div style={{marginTop:10,fontSize:10,color:C.faint,lineHeight:1.6,padding:'8px 10px',
+          background:`${C.danger}0A`,borderRadius:6,border:`1px solid ${C.danger}20`}}>
+          ⚠️ Korrelation ≠ Kausalität. Diese Zusammenhänge sind statistisch — keine medizinische Diagnose.
+        </div>
+      </div>
+    </>;
+  }
+
   // ── Nav ────────────────────────────────────────────────────────────────────
-  const NAV=[{id:'dashboard',l:'Heute'},{id:'eingabe',l:'Eingabe'},{id:'tagebuch',l:'Journal'},{id:'verlauf',l:'Verlauf'},{id:'export',l:'Daten'}];
+  const NAV=[{id:'dashboard',l:'Heute'},{id:'eingabe',l:'Eingabe'},{id:'tagebuch',l:'Journal'},{id:'verlauf',l:'Verlauf'},{id:'insights',l:'Insights'},{id:'export',l:'Daten'}];
   const bot='env(safe-area-inset-bottom,0px)', top='env(safe-area-inset-top,0px)';
 
   return (
@@ -4378,7 +4989,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v5.4</span>
+          <span>v5.5</span>
         </div>
       </header>
 
@@ -4387,6 +4998,7 @@ function App() {
         {tab==='eingabe'   && <Eingabe/>}
         {tab==='tagebuch'  && <Tagebuch/>}
         {tab==='verlauf'   && <Verlauf/>}
+        {tab==='insights'  && <InsightsTab/>}
         {tab==='export'    && <ExportTab/>}
       </main>
 
