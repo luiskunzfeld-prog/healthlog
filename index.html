@@ -2432,6 +2432,544 @@ function SortableChartList({ initialOrder, defs, onSave, onCancel }) {
   );
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// PROFIL-PANEL — Zweistufige Architektur
+//
+//  Ebene 1 (Übersicht):  Kategorien-Karten — zeigen nur Titel + Kurzzusammenfassung
+//  Ebene 2 (Detailansicht): Klick → Karte expandiert, zeigt Werte als Read-only
+//  Bearbeitungsmodus:    „Bearbeiten"-Button → Felder werden editierbar
+//                        „Speichern" → Änderungen werden in settings persistiert
+//                        „Abbrechen" → Draft wird verworfen, Ansicht bleibt offen
+//
+//  Datenstruktur je Kategorie:
+//  {
+//    id:       string            — eindeutiger Schlüssel
+//    icon:     SVG-Element       — Icon für die Kategoriekarte
+//    title:    string            — Anzeigename
+//    color:    string            — Akzentfarbe
+//    summary:  (settings) => string  — Kurzzusammenfassung für Ebene 1
+//    viewRows: (settings) => [{label, value, unit?}]  — Read-only Detailzeilen
+//    editFields: Array<FieldDef>  — Felder im Bearbeitungsmodus
+//    readOnly?: bool             — keine Bearbeitung (Info-Karten)
+//  }
+// ══════════════════════════════════════════════════════════════════════════════
+
+function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
+  // ── State ──────────────────────────────────────────────────────────────────
+  const [openSec,  setOpenSec]  = useState(null);   // Ebene 2: welche Sektion ist auf?
+  const [editSec,  setEditSec]  = useState(null);   // Bearbeitungsmodus: welche Sektion?
+  const [draft,    setDraft]    = useState({});      // Temporäre Änderungen (nicht persistiert)
+  const [saved,    setSaved]    = useState(null);    // Speichern-Feedback: id der Sektion
+
+  // Sektion öffnen/schließen; beim Öffnen editSec zurücksetzen
+  const toggleSec = (id) => {
+    if (openSec === id) {
+      setOpenSec(null);
+      setEditSec(null);
+      setDraft({});
+    } else {
+      setOpenSec(id);
+      setEditSec(null);
+      setDraft({});
+    }
+  };
+
+  // Bearbeitungsmodus öffnen → Draft mit aktuellen Werten befüllen
+  const startEdit = (id) => {
+    setEditSec(id);
+    setDraft({...settings}); // shallow copy als Startpunkt
+  };
+
+  // Speichern → Draft in settings schreiben, kurzes Feedback zeigen
+  const commitEdit = (id) => {
+    setSettings(s => ({...s, ...draft}));
+    setEditSec(null);
+    setDraft({});
+    setSaved(id);
+    setTimeout(() => setSaved(null), 1800);
+  };
+
+  // Abbrechen → Draft verwerfen
+  const cancelEdit = () => {
+    setEditSec(null);
+    setDraft({});
+  };
+
+  const d = (key, fallback='') => editSec ? (draft[key] ?? settings[key] ?? fallback) : (settings[key] ?? fallback);
+
+  // ── Kategorie-Definitionen ─────────────────────────────────────────────────
+  const lastWeight = entries.filter(e=>e.type==='gewicht').at(0)?.data.weight;
+  const totalEntries = entries.length;
+  const trackingDays = new Set(entries.map(e=>e.date)).size;
+
+  const SECTIONS = [
+    // ── 1. Persönliches ──────────────────────────────────────────────────────
+    {
+      id: 'person',
+      color: C.accent,
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>,
+      title: 'Persönliches',
+      summary: s => s.userName ? s.userName : 'Name nicht gesetzt',
+      viewRows: s => [
+        { label:'Name',       value: s.userName || '—' },
+        { label:'Geschlecht', value: s.sex==='m'?'Männlich':s.sex==='f'?'Weiblich':'—' },
+      ],
+      editFields: [
+        { key:'userName', label:'Name', type:'text', placeholder:'Dein Name', mode:null },
+        { key:'sex',      label:'Geschlecht', type:'sex' },
+      ],
+    },
+
+    // ── 2. Körperdaten ────────────────────────────────────────────────────────
+    {
+      id: 'koerper',
+      color: C.accent,
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/><path d="M8 10h8l1 5h-3l-1 7H11l-1-7H7z"/></svg>,
+      title: 'Körperdaten',
+      summary: s => {
+        const parts = [];
+        if (s.height) parts.push(`${s.height} cm`);
+        if (s.alter)  parts.push(`${s.alter} J.`);
+        const w = lastWeight || s.startWeight;
+        if (w) parts.push(`${w} kg`);
+        return parts.length ? parts.join(' · ') : 'Noch keine Angaben';
+      },
+      viewRows: s => {
+        const w = lastWeight || s.startWeight;
+        const bmi = w && s.height ? calcBMI(w, s.height) : null;
+        return [
+          { label:'Körpergröße',  value: s.height  ? `${s.height} cm`   : '—' },
+          { label:'Alter',        value: s.alter   ? `${s.alter} Jahre` : '—' },
+          { label:'Startgewicht', value: s.startWeight ? `${s.startWeight} kg` : '—' },
+          { label:'Aktuell',      value: lastWeight ? `${lastWeight} kg` : '—' },
+          { label:'BMI',          value: bmi ? String(bmi) : '—', highlight: bmi ? (bmi<18.5?C.danger:bmi<25?C.success:bmi<30?C.accent:C.danger) : null },
+        ];
+      },
+      editFields: [
+        { key:'height',      label:'Körpergröße (cm)', type:'number', mode:'numeric',  placeholder:'175', step:'1' },
+        { key:'alter',       label:'Alter (Jahre)',     type:'number', mode:'numeric',  placeholder:'25',  step:'1' },
+        { key:'startWeight', label:'Startgewicht (kg)', type:'number', mode:'decimal',  placeholder:'70',  step:'0.1' },
+      ],
+    },
+
+    // ── 3. Tagesziele — Ernährung ─────────────────────────────────────────────
+    {
+      id: 'ziele_ern',
+      color: C.water,
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2C6 9 4 13 4 16a8 8 0 0 0 16 0c0-3-2-7-8-14z"/></svg>,
+      title: 'Ernährungs­ziele',
+      summary: s => {
+        const kcal = s.kalorienZiel||2000;
+        const w = s.wasserZiel||2000;
+        return `${kcal} kcal · ${w} ml Wasser`;
+      },
+      viewRows: s => [
+        { label:'Kalorien',      value: `${s.kalorienZiel||2000}`,  unit:'kcal/Tag' },
+        { label:'Wasser',        value: `${s.wasserZiel||2000}`,    unit:'ml/Tag' },
+        { label:'Eiweiß',        value: s.proteinZiel>0 ? String(s.proteinZiel) : 'kein Ziel', unit: s.proteinZiel>0?'g':'' },
+        { label:'Kohlenhydrate', value: s.kohlenhydrateZiel>0 ? String(s.kohlenhydrateZiel) : 'kein Ziel', unit: s.kohlenhydrateZiel>0?'g':'' },
+        { label:'Fett',          value: s.fettZiel>0 ? String(s.fettZiel) : 'kein Ziel', unit: s.fettZiel>0?'g':'' },
+        { label:'Ballaststoffe', value: s.ballaststoffeZiel>0 ? String(s.ballaststoffeZiel) : 'kein Ziel', unit: s.ballaststoffeZiel>0?'g':'' },
+      ],
+      editFields: [
+        { key:'kalorienZiel',        label:'Kalorien (kcal/Tag)',    type:'number', mode:'numeric', placeholder:'2000' },
+        { key:'wasserZiel',          label:'Wasser (ml/Tag)',        type:'number', mode:'numeric', placeholder:'2000' },
+        { key:'proteinZiel',         label:'Eiweiß (g)',             type:'number', mode:'numeric', placeholder:'kein Ziel' },
+        { key:'kohlenhydrateZiel',   label:'Kohlenhydrate (g)',      type:'number', mode:'numeric', placeholder:'kein Ziel' },
+        { key:'fettZiel',            label:'Fett (g)',               type:'number', mode:'numeric', placeholder:'kein Ziel' },
+        { key:'ballaststoffeZiel',   label:'Ballaststoffe (g)',      type:'number', mode:'numeric', placeholder:'kein Ziel' },
+      ],
+      hint: '0 = kein Ziel gesetzt, wird nicht im Dashboard angezeigt',
+    },
+
+    // ── 4. Tagesziele — Aktivität ─────────────────────────────────────────────
+    {
+      id: 'ziele_akt',
+      color: C.sport,
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>,
+      title: 'Aktivitäts­ziele',
+      summary: s => {
+        const parts = [];
+        if (s.sportZiel>0)    parts.push(`${s.sportZiel} min Sport`);
+        if (s.schritteZiel>0) parts.push(`${s.schritteZiel.toLocaleString('de-DE')} Schritte`);
+        return parts.length ? parts.join(' · ') : 'Keine Ziele gesetzt';
+      },
+      viewRows: s => [
+        { label:'Sport',    value: s.sportZiel>0    ? String(s.sportZiel)    : 'kein Ziel', unit: s.sportZiel>0?'min/Tag':'' },
+        { label:'Schritte', value: s.schritteZiel>0 ? s.schritteZiel.toLocaleString('de-DE') : 'kein Ziel', unit: s.schritteZiel>0?'Schr./Tag':'' },
+        { label:'Schlaf',   value: s.schlafZiel>0   ? String(s.schlafZiel)   : 'kein Ziel', unit: s.schlafZiel>0?'Std/Nacht':'' },
+      ],
+      editFields: [
+        { key:'sportZiel',    label:'Sport (min/Tag)',    type:'number', mode:'numeric', placeholder:'kein Ziel' },
+        { key:'schritteZiel', label:'Schritte/Tag',       type:'number', mode:'numeric', placeholder:'kein Ziel' },
+        { key:'schlafZiel',   label:'Schlaf (Std/Nacht)', type:'number', mode:'decimal', placeholder:'kein Ziel', step:'0.5' },
+        { key:'_schlafChips', label:'', type:'sleep_chips' },
+      ],
+    },
+
+    // ── 5. App-Design ─────────────────────────────────────────────────────────
+    {
+      id: 'design',
+      color: C.accent,
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>,
+      title: 'App-Design',
+      summary: s => {
+        const preset = ACCENT_PRESETS.find(p=>p.color===(s.accentColor||'#C8B89A'));
+        return preset ? `Akzentfarbe: ${preset.label}` : `Akzentfarbe: ${s.accentColor||'#C8B89A'}`;
+      },
+      viewRows: s => [
+        { label:'Akzentfarbe', value: ACCENT_PRESETS.find(p=>p.color===(s.accentColor||'#C8B89A'))?.label || (s.accentColor||'#C8B89A'), colorDot: s.accentColor||'#C8B89A' },
+      ],
+      editFields: [
+        { key:'accentColor', label:'Akzentfarbe', type:'color_picker' },
+      ],
+    },
+
+    // ── 6. Statistik (read-only) ──────────────────────────────────────────────
+    {
+      id: 'stats',
+      color: C.muted,
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
+      title: 'Statistik',
+      summary: () => `${totalEntries} Einträge · ${trackingDays} Tage`,
+      viewRows: () => [
+        { label:'Einträge gesamt',  value: String(totalEntries) },
+        { label:'Tage getrackt',    value: String(trackingDays) },
+        { label:'Metriken aktiv',   value: String(Object.keys(METRICS).filter(k=>entries.some(e=>e.type===k)).length) },
+        { label:'Version',          value: 'v5.3' },
+        { label:'Speicher',         value: 'localStorage · lokal' },
+      ],
+      readOnly: true,
+    },
+
+    // ── 7. Datenschutz (read-only) ────────────────────────────────────────────
+    {
+      id: 'privacy',
+      color: C.success,
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
+      title: 'Datenschutz',
+      summary: () => 'Alle Daten lokal · kein Server',
+      viewRows: () => [
+        { label:'Datenspeicherung',  value: 'Nur auf diesem Gerät' },
+        { label:'Server-Übertragung',value: 'Keine' },
+        { label:'Accounts',          value: 'Nicht erforderlich' },
+        { label:'Werbung',           value: 'Keine' },
+        { label:'Export',            value: 'Jederzeit im Daten-Tab' },
+      ],
+      readOnly: true,
+    },
+  ];
+
+  // ── Avatar-Initialen ───────────────────────────────────────────────────────
+  const initials = (settings.userName||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+
+  // ── Render-Helfer: Edit-Feld ──────────────────────────────────────────────
+  const renderEditField = (field, sec) => {
+    const isEditing = editSec === sec.id;
+    if (!isEditing) return null;
+
+    if (field.type === 'sex') {
+      return (
+        <div key={field.key} style={{marginBottom:14}}>
+          <label style={ST.lbl}>{field.label}</label>
+          <div style={{display:'flex',gap:6}}>
+            {[['m','♂ Männlich'],['f','♀ Weiblich']].map(([v,l])=>(
+              <button key={v}
+                onClick={()=>setDraft(dr=>({...dr,sex:v}))}
+                style={{flex:1,padding:'10px 0',borderRadius:8,fontSize:13,cursor:'pointer',
+                  border:`1px solid ${draft.sex===v||(!draft.sex&&settings.sex===v)?C.accent:C.border}`,
+                  background:draft.sex===v||(!draft.sex&&settings.sex===v)?`${C.accent}18`:'transparent',
+                  color:draft.sex===v||(!draft.sex&&settings.sex===v)?C.accent:C.muted}}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (field.type === 'sleep_chips') {
+      const val = draft.schlafZiel ?? settings.schlafZiel ?? 0;
+      return (
+        <div key={field.key} style={{marginBottom:14}}>
+          <label style={ST.lbl}>Schnellauswahl</label>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            {[6,7,7.5,8,8.5,9].map(h=>(
+              <button key={h}
+                onClick={()=>setDraft(dr=>({...dr,schlafZiel:h}))}
+                style={{padding:'5px 12px',borderRadius:6,fontSize:12,cursor:'pointer',
+                  border:`1px solid ${val===h?C.sleep:C.border}`,
+                  background:val===h?`${C.sleep}18`:'transparent',
+                  color:val===h?C.sleep:C.muted}}>
+                {h} Std
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (field.type === 'color_picker') {
+      const col = draft.accentColor ?? settings.accentColor ?? '#C8B89A';
+      return (
+        <div key={field.key} style={{marginBottom:0}}>
+          <label style={ST.lbl}>{field.label}</label>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
+            {ACCENT_PRESETS.map(p=>(
+              <button key={p.color}
+                onClick={()=>setDraft(dr=>({...dr,accentColor:p.color}))}
+                title={p.label}
+                style={{width:32,height:32,borderRadius:8,
+                  border:`2px solid ${col===p.color?'#fff':'transparent'}`,
+                  background:p.color,cursor:'pointer',
+                  outline:col===p.color?`2px solid ${p.color}`:'none',
+                  outlineOffset:1,flexShrink:0}}/>
+            ))}
+          </div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input type="color" value={col}
+              onChange={e=>setDraft(dr=>({...dr,accentColor:e.target.value}))}
+              style={{width:32,height:32,borderRadius:6,border:`1px solid ${C.border}`,
+                padding:2,cursor:'pointer',background:'transparent',flexShrink:0}}/>
+            <input type="text" maxLength={7} value={col}
+              onChange={e=>{ if(/^#[0-9a-fA-F]{0,6}$/.test(e.target.value)) setDraft(dr=>({...dr,accentColor:e.target.value})); }}
+              style={{...ST.inp,marginBottom:0,flex:1,fontSize:13,fontFamily:'monospace',padding:'7px 10px'}}/>
+            <button onClick={()=>setDraft(dr=>({...dr,accentColor:'#C8B89A'}))}
+              style={{fontSize:11,color:C.faint,background:'none',border:`1px solid ${C.border}`,
+                borderRadius:6,padding:'6px 10px',cursor:'pointer',flexShrink:0,fontFamily:'inherit'}}>
+              Reset
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Standard: number / text
+    return (
+      <div key={field.key} style={{marginBottom:14}}>
+        <label style={ST.lbl}>{field.label}</label>
+        <input
+          style={{...ST.inp,marginBottom:0}}
+          type={field.type}
+          inputMode={field.mode||undefined}
+          step={field.step||undefined}
+          placeholder={field.placeholder||''}
+          value={draft[field.key] != null ? draft[field.key] : (settings[field.key] ?? '')}
+          onChange={e=>{
+            const raw = e.target.value;
+            const val = field.type==='number' ? (raw===''?null:(+raw||0)) : raw;
+            setDraft(dr=>({...dr,[field.key]:val}));
+          }}
+        />
+      </div>
+    );
+  };
+
+  // ── Render-Helfer: View-Zeile ─────────────────────────────────────────────
+  const ViewRow = ({ label, value, unit, highlight, colorDot }) => (
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',
+      padding:'8px 0',borderBottom:`1px solid ${C.border}33`}}>
+      <span style={{fontSize:12,color:C.muted}}>{label}</span>
+      <div style={{display:'flex',alignItems:'center',gap:6}}>
+        {colorDot && <div style={{width:14,height:14,borderRadius:4,background:colorDot,flexShrink:0}}/>}
+        <span style={{fontSize:13,fontWeight:500,color:highlight||C.text}}>
+          {value}{unit ? <span style={{fontSize:11,color:C.muted,marginLeft:3}}>{unit}</span> : null}
+        </span>
+      </div>
+    </div>
+  );
+
+  // ── Profil-Header-Karte ────────────────────────────────────────────────────
+  const ProfileHero = () => {
+    const isEditing = editSec === 'hero';
+    const nameVal = isEditing ? (draft.userName ?? settings.userName ?? '') : (settings.userName || '');
+    return (
+      <div style={{...ST.card, padding:'20px 16px', marginBottom:12, textAlign:'center'}}>
+        <div style={{width:64,height:64,borderRadius:'50%',
+          background:`${C.accent}20`,border:`2px solid ${C.accent}40`,
+          display:'flex',alignItems:'center',justifyContent:'center',
+          margin:'0 auto 12px'}}>
+          {settings.userName
+            ? <span style={{fontFamily:"'DM Serif Display',Georgia,serif",fontSize:22,color:C.accent}}>{initials}</span>
+            : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          }
+        </div>
+        {isEditing
+          ? <input style={{...ST.inp,textAlign:'center',marginBottom:0,fontSize:16,fontWeight:500}}
+              placeholder="Dein Name" autoFocus
+              value={nameVal}
+              onChange={e=>setDraft(dr=>({...dr,userName:e.target.value}))}/>
+          : <div style={{fontSize:18,fontWeight:600,color:C.text,marginBottom:2,fontFamily:"'DM Serif Display',Georgia,serif"}}>
+              {settings.userName || 'Kein Name'}
+            </div>
+        }
+        <div style={{fontSize:11,color:C.faint,marginTop:isEditing?8:4}}>
+          {totalEntries} Einträge · {trackingDays} Tage getrackt
+        </div>
+        {isEditing
+          ? <div style={{display:'flex',gap:8,marginTop:12}}>
+              <button onClick={cancelEdit}
+                style={{flex:1,...ST.outbtn(C.muted),padding:'8px 0',fontSize:13}}>
+                Abbrechen
+              </button>
+              <button onClick={()=>commitEdit('hero')}
+                style={{flex:2,...ST.btn(C.accent),padding:'8px 0',fontSize:13}}>
+                ✓ Speichern
+              </button>
+            </div>
+          : <button onClick={()=>{ startEdit('hero'); }}
+              style={{marginTop:10,background:`${C.accent}14`,border:`1px solid ${C.accent}40`,
+                borderRadius:8,padding:'6px 18px',fontSize:12,color:C.accent,cursor:'pointer',fontFamily:'inherit'}}>
+              ✎ Namen bearbeiten
+            </button>
+        }
+      </div>
+    );
+  };
+
+  // ── Haupt-Render ──────────────────────────────────────────────────────────
+  return (
+    <div style={{position:'fixed',inset:0,zIndex:400,background:C.bg,
+      display:'flex',flexDirection:'column',overflow:'hidden'}}>
+
+      {/* ── Panel-Header ── */}
+      <div style={{flexShrink:0,padding:`calc(14px + ${top}) 20px 14px`,
+        borderBottom:`1px solid ${C.border}`,
+        display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div style={{fontFamily:"'DM Serif Display',Georgia,serif",fontSize:20,fontWeight:400,color:C.text}}>
+          Profil
+        </div>
+        <button onClick={onClose}
+          style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,
+            color:C.muted,fontSize:13,padding:'5px 12px',cursor:'pointer',fontFamily:'inherit'}}>
+          ✕ Schließen
+        </button>
+      </div>
+
+      {/* ── Scrollbarer Inhalt ── */}
+      <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch',padding:'16px 16px 48px'}}>
+
+        {/* Ebene 0: Hero-Karte (Name + Avatar) */}
+        <ProfileHero/>
+
+        {/* Ebene 1 + 2: Kategorien-Akkordeon */}
+        {SECTIONS.map(sec => {
+          const isOpen   = openSec  === sec.id;
+          const isEdit   = editSec  === sec.id;
+          const wasSaved = saved    === sec.id;
+          const sumText  = sec.summary(settings);
+          const rows     = isOpen ? sec.viewRows(settings) : [];
+
+          return (
+            <div key={sec.id} style={{
+              ...ST.card, padding:0, overflow:'hidden', marginBottom:8,
+              border:`1px solid ${isOpen ? sec.color+'50' : C.border}`,
+              transition:'border-color 0.2s',
+            }}>
+
+              {/* ══ Ebene 1: Kategorie-Kopfzeile (immer sichtbar) ══ */}
+              <button
+                onClick={()=>toggleSec(sec.id)}
+                style={{width:'100%',background:'transparent',border:'none',cursor:'pointer',
+                  padding:'13px 16px',display:'flex',alignItems:'center',gap:12,textAlign:'left'}}>
+
+                {/* Farb-Indikator + Icon */}
+                <div style={{width:34,height:34,borderRadius:9,flexShrink:0,
+                  background:`${sec.color}18`,border:`1px solid ${sec.color}30`,
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  color:isOpen?sec.color:C.muted}}>
+                  {sec.icon}
+                </div>
+
+                {/* Titel + Zusammenfassung */}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:isOpen?C.text:C.text,marginBottom:1}}>
+                    {sec.title}
+                  </div>
+                  <div style={{fontSize:11,color:isOpen?sec.color:C.faint,
+                    overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
+                    transition:'color 0.2s'}}>
+                    {wasSaved ? '✓ Gespeichert' : sumText}
+                  </div>
+                </div>
+
+                {/* Chevron */}
+                <span style={{fontSize:18,color:isOpen?sec.color:C.faint,flexShrink:0,
+                  display:'inline-block',transition:'transform 0.25s',
+                  transform:isOpen?'rotate(90deg)':'rotate(0deg)'}}>›</span>
+              </button>
+
+              {/* ══ Ebene 2: Detailansicht (bei Klick) ══ */}
+              {isOpen && (
+                <div style={{borderTop:`1px solid ${C.border}`,padding:'14px 16px 16px'}}>
+
+                  {/* ── Ansichtsmodus: Read-only Zeilen ── */}
+                  {!isEdit && (
+                    <>
+                      {rows.map((row,i)=>(
+                        <ViewRow key={i} {...row}/>
+                      ))}
+                      {sec.hint && (
+                        <div style={{fontSize:10,color:C.faint,marginTop:8,lineHeight:1.5}}>{sec.hint}</div>
+                      )}
+
+                      {/* Bearbeiten-Button (nur wenn Sektion nicht read-only) */}
+                      {!sec.readOnly && (
+                        <button onClick={()=>startEdit(sec.id)}
+                          style={{marginTop:14,width:'100%',background:`${sec.color}14`,
+                            border:`1px solid ${sec.color}40`,borderRadius:8,
+                            padding:'10px 0',fontSize:13,fontWeight:500,
+                            color:sec.color,cursor:'pointer',fontFamily:'inherit',
+                            letterSpacing:0.2}}>
+                          ✎ Bearbeiten
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  {/* ── Bearbeitungsmodus: Edit-Felder ── */}
+                  {isEdit && (
+                    <>
+                      <div style={{fontSize:10,color:sec.color,letterSpacing:0.8,
+                        textTransform:'uppercase',marginBottom:14,fontWeight:600}}>
+                        Bearbeitungsmodus
+                      </div>
+
+                      {sec.editFields.map(field => renderEditField(field, sec))}
+
+                      {sec.hint && (
+                        <div style={{fontSize:10,color:C.faint,marginBottom:14,lineHeight:1.5}}>{sec.hint}</div>
+                      )}
+
+                      {/* Speichern / Abbrechen */}
+                      <div style={{display:'flex',gap:8,marginTop:4}}>
+                        <button onClick={cancelEdit}
+                          style={{flex:1,background:'transparent',color:C.muted,
+                            border:`1px solid ${C.border}`,borderRadius:8,
+                            padding:'11px 0',fontSize:13,fontWeight:500,
+                            cursor:'pointer',fontFamily:'inherit'}}>
+                          Abbrechen
+                        </button>
+                        <button onClick={()=>commitEdit(sec.id)}
+                          style={{flex:2,background:sec.color,color:C.bg,border:'none',
+                            borderRadius:8,padding:'11px 0',fontSize:13,fontWeight:600,
+                            cursor:'pointer',fontFamily:'inherit'}}>
+                          ✓ Speichern
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 function App() {
   const [tab,setTab]           = useState('dashboard');
@@ -3403,7 +3941,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v5.1</span>
+          <span>v5.3</span>
         </div>
       </header>
 
@@ -3474,209 +4012,13 @@ function App() {
 
       {/* ── Profil-Panel (Fullscreen Overlay) ── */}
       {showProfile && (
-        <div style={{position:'fixed',inset:0,zIndex:400,background:C.bg,
-          display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          {/* Profil-Header */}
-          <div style={{flexShrink:0,padding:`calc(16px + ${top}) 20px 14px`,
-            borderBottom:`1px solid ${C.border}`,
-            display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <div style={{fontFamily:"'DM Serif Display',Georgia,serif",fontSize:18,fontWeight:400,color:C.text}}>
-              Profil
-            </div>
-            <button onClick={()=>setShowProfile(false)}
-              style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,
-                color:C.muted,fontSize:13,padding:'5px 12px',cursor:'pointer',fontFamily:'inherit'}}>
-              Schließen
-            </button>
-          </div>
-
-          {/* Profil-Inhalt */}
-          <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch',padding:'20px 20px 40px'}}>
-
-            {/* ── Avatar + Name ── */}
-            <div style={{...ST.card,textAlign:'center',padding:'24px 16px',marginBottom:10}}>
-              <div style={{width:64,height:64,borderRadius:'50%',background:`${C.accent}20`,
-                border:`1.5px solid ${C.accent}40`,display:'flex',alignItems:'center',
-                justifyContent:'center',margin:'0 auto 12px'}}>
-                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-                </svg>
-              </div>
-              <input style={{...ST.inp,textAlign:'center',marginBottom:0,fontSize:16,fontWeight:500}}
-                placeholder="Dein Name"
-                value={settings.userName||''}
-                onChange={e=>setSettings(s=>({...s,userName:e.target.value}))}/>
-            </div>
-
-            {/* ── Körperdaten ── */}
-            <div style={ST.secttl}>Körperdaten</div>
-            <div style={ST.card}>
-              <div style={ST.grid2}>
-                {[
-                  ['Größe (cm)',   'height',  'numeric', '175'],
-                  ['Alter (Jahre)','alter',   'numeric', '25'],
-                  ['Gewicht (kg)', 'startWeight','decimal','70'],
-                ].map(([label,key,mode,ph])=>(
-                  <div key={key}>
-                    <label style={ST.lbl}>{label}</label>
-                    <input style={{...ST.inp,marginBottom:0}} type="number" inputMode={mode} placeholder={ph}
-                      value={settings[key]||''}
-                      onChange={e=>setSettings(s=>({...s,[key]:+e.target.value||null}))}/>
-                  </div>
-                ))}
-                <div>
-                  <label style={ST.lbl}>Geschlecht</label>
-                  <div style={{display:'flex',gap:6}}>
-                    {[['m','♂'],['f','♀']].map(([v,l])=>(
-                      <button key={v} onClick={()=>setSettings(s=>({...s,sex:v}))}
-                        style={{flex:1,padding:'10px 0',borderRadius:8,fontSize:15,cursor:'pointer',
-                          border:`1px solid ${settings.sex===v?C.accent:C.border}`,
-                          background:settings.sex===v?`${C.accent}18`:'transparent',
-                          color:settings.sex===v?C.accent:C.muted}}>{l}</button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ── App-Design ── */}
-            <div style={ST.secttl}>App-Design</div>
-            <div style={ST.card}>
-              <label style={ST.lbl}>Akzentfarbe</label>
-              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
-                {ACCENT_PRESETS.map(p=>(
-                  <button key={p.color} onClick={()=>setSettings(s=>({...s,accentColor:p.color}))}
-                    title={p.label}
-                    style={{width:32,height:32,borderRadius:8,border:`2px solid ${(settings.accentColor||'#C8B89A')===p.color?'#fff':'transparent'}`,
-                      background:p.color,cursor:'pointer',
-                      outline:(settings.accentColor||'#C8B89A')===p.color?`2px solid ${p.color}`:'none',
-                      outlineOffset:1,flexShrink:0}}/>
-                ))}
-              </div>
-              <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <input type="color" value={settings.accentColor||'#C8B89A'}
-                  onChange={e=>setSettings(s=>({...s,accentColor:e.target.value}))}
-                  style={{width:32,height:32,borderRadius:6,border:`1px solid ${C.border}`,
-                    padding:2,cursor:'pointer',background:'transparent',flexShrink:0}}/>
-                <input type="text" maxLength={7}
-                  value={settings.accentColor||'#C8B89A'}
-                  onChange={e=>{ if(/^#[0-9a-fA-F]{0,6}$/.test(e.target.value)) setSettings(s=>({...s,accentColor:e.target.value})); }}
-                  style={{...ST.inp,marginBottom:0,flex:1,fontSize:13,fontFamily:'monospace',padding:'7px 10px'}}/>
-                <button onClick={()=>setSettings(s=>({...s,accentColor:'#C8B89A'}))}
-                  style={{fontSize:11,color:C.faint,background:'none',border:`1px solid ${C.border}`,
-                    borderRadius:6,padding:'6px 10px',cursor:'pointer',flexShrink:0}}>Reset</button>
-              </div>
-            </div>
-
-            {/* ── Tagesziele ── */}
-            <div style={ST.secttl}>Tagesziele</div>
-
-            {/* Ernährung */}
-            <div style={{...ST.card,marginBottom:8}}>
-              <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:12}}>Ernährung</div>
-              <div style={ST.grid2}>
-                {[
-                  ['Kalorien (kcal)', 'kalorienZiel', 2000, 'numeric'],
-                  ['Wasser (ml)',     'wasserZiel',   2000, 'numeric'],
-                  ['Eiweiß (g)',      'proteinZiel',  0,    'numeric'],
-                  ['Kohlenhydrate (g)','kohlenhydrateZiel',0,'numeric'],
-                  ['Fett (g)',        'fettZiel',     0,    'numeric'],
-                  ['Ballaststoffe (g)','ballaststoffeZiel',0,'numeric'],
-                ].map(([l,k,def,mode])=>(
-                  <div key={k}>
-                    <label style={ST.lbl}>{l}</label>
-                    <input style={{...ST.inp,marginBottom:0}} type="number" inputMode={mode}
-                      placeholder={def>0?String(def):'kein Ziel'}
-                      value={settings[k]||''}
-                      onChange={e=>setSettings(s=>({...s,[k]:+e.target.value||0}))}/>
-                  </div>
-                ))}
-              </div>
-              <div style={{fontSize:10,color:C.faint,marginTop:4,lineHeight:1.5}}>
-                0 = kein Ziel gesetzt, wird nicht im Dashboard angezeigt
-              </div>
-            </div>
-
-            {/* Aktivität */}
-            <div style={{...ST.card,marginBottom:8}}>
-              <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:12}}>Aktivität</div>
-              <div style={ST.grid2}>
-                {[
-                  ['Sport (Minuten)', 'sportZiel',    0, 'numeric'],
-                  ['Schritte',        'schritteZiel', 0, 'numeric'],
-                ].map(([l,k,def,mode])=>(
-                  <div key={k}>
-                    <label style={ST.lbl}>{l}</label>
-                    <input style={{...ST.inp,marginBottom:0}} type="number" inputMode={mode}
-                      placeholder="kein Ziel"
-                      value={settings[k]||''}
-                      onChange={e=>setSettings(s=>({...s,[k]:+e.target.value||0}))}/>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Schlaf */}
-            <div style={{...ST.card,marginBottom:8}}>
-              <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:12}}>Schlaf</div>
-              <div>
-                <label style={ST.lbl}>Schlafdauer (Stunden)</label>
-                <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:8}}>
-                  {[6,7,7.5,8,8.5,9].map(h=>(
-                    <button key={h} onClick={()=>setSettings(s=>({...s,schlafZiel:h}))}
-                      style={{padding:'5px 12px',borderRadius:6,fontSize:12,cursor:'pointer',
-                        border:`1px solid ${settings.schlafZiel===h?C.sleep:C.border}`,
-                        background:settings.schlafZiel===h?`${C.sleep}18`:'transparent',
-                        color:settings.schlafZiel===h?C.sleep:C.muted}}>{h} Std</button>
-                  ))}
-                </div>
-                <input style={{...ST.inp,marginBottom:0}} type="number" step="0.5" inputMode="decimal"
-                  placeholder="kein Ziel (z.B. 8)"
-                  value={settings.schlafZiel||''}
-                  onChange={e=>setSettings(s=>({...s,schlafZiel:+e.target.value||0}))}/>
-              </div>
-            </div>
-
-            {/* ── Datenschutz ── */}
-            <div style={ST.secttl}>Datenschutz</div>
-            <div style={ST.card}>
-              <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
-                <div style={{width:32,height:32,borderRadius:8,background:`${C.success}18`,
-                  display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.success} strokeWidth="2" strokeLinecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                </div>
-                <div>
-                  <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:4}}>Alle Daten lokal</div>
-                  <div style={{fontSize:11,color:C.muted,lineHeight:1.6}}>
-                    HealthLog speichert ausschließlich auf diesem Gerät. Es werden keine Daten an Server übertragen, keine Accounts benötigt, keine Werbung geschaltet.
-                  </div>
-                </div>
-              </div>
-              <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${C.border}`,
-                fontSize:11,color:C.faint,lineHeight:1.6}}>
-                Daten-Export: Im Daten-Tab kannst du jederzeit ein vollständiges Backup herunterladen oder alle Daten löschen.
-              </div>
-            </div>
-
-            {/* ── Über die App ── */}
-            <div style={ST.secttl}>Über HealthLog</div>
-            <div style={ST.card}>
-              {[
-                ['Version',    'v5.2'],
-                ['Plattform',  'PWA · Offline-fähig'],
-                ['Datenspeicher', 'localStorage (lokal)'],
-                ['Diagramme',  'Chart.js 4.4'],
-              ].map(([l,v])=>(
-                <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',
-                  borderBottom:`1px solid ${C.border}44`,fontSize:12}}>
-                  <span style={{color:C.muted}}>{l}</span>
-                  <span style={{color:C.text,fontWeight:500}}>{v}</span>
-                </div>
-              ))}
-            </div>
-
-          </div>
-        </div>
+        <ProfilePanel
+          settings={settings}
+          setSettings={setSettings}
+          onClose={()=>setShowProfile(false)}
+          top={top}
+          entries={entries}
+        />
       )}
 
       <nav style={{flexShrink:0,background:C.bg,borderTop:`1px solid ${C.border}`,display:'flex',
