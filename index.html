@@ -2880,6 +2880,87 @@ function HealthImport({ onImport, settings }) {
 
 
 // ── Kalorienziel-Rechner (Mifflin-St Jeor) ───────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// MAKRONÄHRSTOFF-RECHNER
+//
+// Berechnungslogik — alle Quellen: DGE, WHO, ISSN Position Stand 2017
+//
+// Pipeline: kcal → Protein → Fett → Kohlenhydrate (Restkalorien) → Ballaststoffe
+//
+// 1. PROTEIN (höchste Priorität — Muskelmasse & Sättigung)
+//    Quelle: ISSN Position Stand 2017, Morton et al. 2018
+//    • Defizit  (goal < -200 kcal): 2.2 g/kg  — Muskelerhalt im Kaloriendefizit
+//    • Surplus  (goal > 0 kcal):    2.0 g/kg  — Muskelaufbau
+//    • Maintenance:                 1.8 g/kg  — allgemeines Wohlbefinden
+//    Energiewert: 4 kcal/g
+//
+// 2. FETT (zweite Priorität — Hormonsystem & fettlösliche Vitamine)
+//    Quelle: DGE 2019, EFSA
+//    • Minimum:  0.8 g/kg Körpergewicht (Hormonproduktion)
+//    • Optimum:  27% der Gesamtkalorien (Mitte des DGE-Zielbereichs 25-30%)
+//    • Ergebnis: max(minimum_by_weight, target_by_pct)
+//    Energiewert: 9 kcal/g
+//
+// 3. KOHLENHYDRATE (Restkalorien nach Protein + Fett)
+//    Quelle: DGE — kein absolutes Minimum (außer Gehirnfunktion ~130g/Tag)
+//    • Restkalorien / 4 kcal/g
+//    • Mindest-Floor: 100g/Tag (Gehirnfunktion, Sportleistung)
+//    • Wenn Budget zu knapp: Fett wird leicht reduziert, nie Protein
+//    Energiewert: 4 kcal/g
+//
+// 4. BALLASTSTOFFE (separat — zählen als Teil der Kohlenhydrate)
+//    Quelle: DGE: mind. 30g/Tag; WHO: 14g/1000 kcal
+//    • fiber = max(30g, round(kcal/1000 × 14))
+//
+// WASSER (Bonus-Berechnung)
+//    Quelle: DGE: 35ml/kg/Tag als Grundregel
+//    • water_ml = weight × 35 (adjustiert für Aktivitätsniveau)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function berechneMakros(kcal, weight, goalDelta) {
+  if (!kcal || !weight || kcal < 1 || weight < 1) return null;
+
+  // ── 1. Protein ────────────────────────────────────────────────────────────
+  const pFaktor  = goalDelta < -200 ? 2.2 : goalDelta > 0 ? 2.0 : 1.8;
+  const protein  = Math.round(weight * pFaktor);
+  const pKcal    = protein * 4;
+
+  // ── 2. Fett ───────────────────────────────────────────────────────────────
+  const fatMin   = Math.round(weight * 0.8);               // Minimum nach Gewicht
+  const fatOpt   = Math.round((kcal * 0.27) / 9);          // 27% der Gesamtkalorien
+  let   fat      = Math.max(fatMin, fatOpt);
+  let   fKcal    = fat * 9;
+
+  // ── 3. Kohlenhydrate ──────────────────────────────────────────────────────
+  let restKcal = kcal - pKcal - fKcal;
+  // Wenn Budget zu knapp → Fett auf Minimum reduzieren
+  if (restKcal < fatMin * 4) {                              // weniger als Mindest-Carb-Budget
+    fat    = fatMin;
+    fKcal  = fat * 9;
+    restKcal = kcal - pKcal - fKcal;
+  }
+  const carbs = Math.max(100, Math.round(restKcal / 4));    // mind. 100g/Tag
+
+  // ── 4. Ballaststoffe ──────────────────────────────────────────────────────
+  const fiber = Math.max(30, Math.round(kcal / 1000 * 14));
+
+  // ── 5. Wasser (Bonus) ─────────────────────────────────────────────────────
+  const water = Math.round(weight * 35 / 100) * 100;        // auf 100ml gerundet
+
+  return { protein, carbs, fat, fiber, water };
+}
+
+// Makro-Verteilung in % der Kalorien berechnen
+function makroVerteilung(macros) {
+  const total = macros.protein * 4 + macros.carbs * 4 + macros.fat * 9;
+  if (!total) return { p:0, c:0, f:0 };
+  return {
+    p: Math.round(macros.protein * 4 / total * 100),
+    c: Math.round(macros.carbs   * 4 / total * 100),
+    f: Math.round(macros.fat     * 9 / total * 100),
+  };
+}
+
 function KalorienRechner({ settings, onSave, lastWeight, onUpdateSettings }) {
   // Daten aus Einstellungen & Einträgen vorausfüllen
   const [step, setStep] = useState(0);
@@ -2889,6 +2970,12 @@ function KalorienRechner({ settings, onSave, lastWeight, onUpdateSettings }) {
   const [cm,   setCm]   = useState(String(settings.height||175));
   const [act,  setAct]  = useState(settings.lastAct||1.55);
   const [goal, setGoal] = useState(settings.lastGoal??0);
+
+  // ── Makro-Override-State ──────────────────────────────────────────────────
+  // null = auto-berechnet, number = manuell überschrieben
+  const [mo, setMO] = useState({protein:null, carbs:null, fat:null, fiber:null});
+  const [editMacro, setEM] = useState(null);  // welches Makro wird gerade editiert
+  const [editVal,   setEV] = useState('');
 
   const ACT_LEVELS = [
     { val:1.2,   label:'Kaum aktiv',    sub:'Bürojob, kein Sport' },
@@ -3006,44 +3093,246 @@ function KalorienRechner({ settings, onSave, lastWeight, onUpdateSettings }) {
         ))}
       </>}
 
-      {/* ── Schritt 3: Ergebnis ── */}
+      {/* ── Schritt 3: Ergebnis + Makros ── */}
       {step===3&&<>
-        {result ? <>
-          <div style={{textAlign:'center',padding:'16px 0 8px'}}>
-            <div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>
-              Dein täglicher Kalorienbedarf
-            </div>
-            <div style={{fontSize:52,fontWeight:700,color:C.accent,lineHeight:1}}>
-              {result.toLocaleString('de-DE')}
-            </div>
-            <div style={{fontSize:14,color:C.muted,marginTop:4}}>kcal / Tag</div>
-          </div>
-          {/* Zusammenfassung der Eingaben */}
-          <div style={{...ST.card,background:C.cardAlt,marginBottom:14}}>
-            {[
-              ['Geschlecht', sex==='m'?'Männlich':'Weiblich'],
-              ['Alter', age+' Jahre'],
-              ['Gewicht', kg+' kg'],
-              ['Größe', cm+' cm'],
-              ['Aktivität', ACT_LEVELS.find(a=>a.val===act)?.label],
-              ['Ziel', GOALS.find(g=>g.val===goal)?.label],
-              ['Grundumsatz', Math.round(sex==='m'?10*+kg+6.25*+cm-5*+age+5:10*+kg+6.25*+cm-5*+age-161)+' kcal'],
-            ].map(([l,v])=>(
-              <div key={l} style={{display:'flex',justifyContent:'space-between',
-                padding:'5px 0',borderBottom:`1px solid ${C.border}44`,fontSize:12}}>
-                <span style={{color:C.muted}}>{l}</span>
-                <span style={{color:C.text,fontWeight:500}}>{v}</span>
+        {result ? (()=>{
+          // ── Makros berechnen ──────────────────────────────────────────────
+          const computed = berechneMakros(result, +kg, goal);
+          // Finale Werte: Override hat Vorrang, sonst berechneter Wert
+          const final = computed ? {
+            protein: mo.protein ?? computed.protein,
+            carbs:   mo.carbs   ?? computed.carbs,
+            fat:     mo.fat     ?? computed.fat,
+            fiber:   mo.fiber   ?? computed.fiber,
+            water:   computed.water,
+          } : null;
+
+          const vert = final ? makroVerteilung(final) : null;
+
+          // ── Makro-Karte ───────────────────────────────────────────────────
+          const MACRO_DEF = [
+            { key:'protein', label:'Eiweiß',        unit:'g',  color:C.sport,   hint:`${(+kg*1.8).toFixed(0)}–${(+kg*2.2).toFixed(0)}g empfohlen` },
+            { key:'carbs',   label:'Kohlenhydrate',  unit:'g',  color:C.water,   hint:'Rest-Kalorien nach Protein + Fett' },
+            { key:'fat',     label:'Fett',           unit:'g',  color:C.mood,    hint:`Min. ${Math.round(+kg*0.8)}g (0.8g/kg KG)` },
+            { key:'fiber',   label:'Ballaststoffe',  unit:'g',  color:C.success, hint:'DGE: min. 30g/Tag' },
+          ];
+
+          const commitEdit = () => {
+            const v = parseFloat(editVal);
+            if (!isNaN(v) && v > 0) setMO(prev=>({...prev,[editMacro]:Math.round(v)}));
+            setEM(null); setEV('');
+          };
+
+          return <>
+            {/* ── Kalorien-Hero ── */}
+            <div style={{textAlign:'center',padding:'14px 0 10px'}}>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>
+                Täglicher Kalorienbedarf
               </div>
-            ))}
-          </div>
-          <button style={{...ST.btn(C.accent),marginBottom:8}}
-            onClick={()=>{
-              onUpdateSettings({sex,alter:+age||null,lastAct:act,lastGoal:goal});
-              onSave(result);
-            }}>
-            {result.toLocaleString('de-DE')} kcal als Ziel übernehmen
-          </button>
-        </> : (
+              <div style={{fontSize:48,fontWeight:700,color:C.accent,lineHeight:1}}>
+                {result.toLocaleString('de-DE')}
+              </div>
+              <div style={{fontSize:13,color:C.muted,marginTop:3}}>kcal / Tag</div>
+            </div>
+
+            {/* ── Eingaben-Summary (kompakt) ── */}
+            <div style={{...ST.card,background:C.cardAlt,marginBottom:14,padding:'10px 14px'}}>
+              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                {[
+                  [sex==='m'?'♂':'♀', ''],
+                  [age, 'J.'],
+                  [Math.round(+kg), 'kg'],
+                  [cm, 'cm'],
+                  [ACT_LEVELS.find(a=>a.val===act)?.label, ''],
+                  [GOALS.find(g=>g.val===goal)?.label, ''],
+                  ['BMR: '+Math.round(sex==='m'?10*+kg+6.25*+cm-5*+age+5:10*+kg+6.25*+cm-5*+age-161), 'kcal'],
+                ].map(([v,u],i)=> v ? (
+                  <span key={i} style={{fontSize:11,padding:'2px 8px',borderRadius:6,
+                    background:`${C.accent}14`,color:C.muted}}>
+                    {v}{u?' '+u:''}
+                  </span>
+                ) : null)}
+              </div>
+            </div>
+
+            {/* ══ Makronährstoff-Ziele ══ */}
+            {computed && final && <>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:1,textTransform:'uppercase',
+                marginBottom:10,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <span>Makronährstoff-Ziele</span>
+                {Object.values(mo).some(v=>v!==null) && (
+                  <button onClick={()=>setMO({protein:null,carbs:null,fat:null,fiber:null})}
+                    style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,
+                      borderRadius:5,padding:'2px 8px',cursor:'pointer',fontFamily:'inherit'}}>
+                    Reset alle
+                  </button>
+                )}
+              </div>
+
+              {/* Makro-Karten Grid */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
+                {MACRO_DEF.map(m => {
+                  const val     = final[m.key];
+                  const calcVal = computed[m.key];
+                  const isOverride = mo[m.key] !== null;
+                  const isEditing  = editMacro === m.key;
+                  const pctOfKcal  = m.key!=='fiber'
+                    ? Math.round((val * (m.key==='fat'?9:4)) / result * 100)
+                    : null;
+
+                  return (
+                    <div key={m.key} style={{
+                      ...ST.card, padding:'12px',
+                      border:`1px solid ${isOverride?m.color+'60':C.border}`,
+                      background: isOverride?`${m.color}08`:C.card,
+                    }}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                        <span style={{fontSize:10,color:m.color,letterSpacing:0.6,textTransform:'uppercase',fontWeight:600}}>
+                          {m.label}
+                        </span>
+                        {isOverride && (
+                          <button onClick={()=>setMO(prev=>({...prev,[m.key]:null}))}
+                            style={{fontSize:9,color:C.faint,background:'none',border:'none',
+                              cursor:'pointer',padding:'0 2px',fontFamily:'inherit'}}>
+                            ↺
+                          </button>
+                        )}
+                      </div>
+
+                      {isEditing ? (
+                        <div style={{display:'flex',gap:4,alignItems:'center',marginBottom:4}}>
+                          <input
+                            autoFocus
+                            type="number" inputMode="numeric"
+                            value={editVal}
+                            onChange={e=>setEV(e.target.value)}
+                            onKeyDown={e=>{ if(e.key==='Enter') commitEdit(); if(e.key==='Escape'){setEM(null);setEV('');} }}
+                            style={{...ST.inp,marginBottom:0,padding:'6px 8px',fontSize:14,
+                              flex:1,borderColor:m.color}}
+                            placeholder={String(val)}/>
+                          <button onClick={commitEdit}
+                            style={{padding:'6px 10px',borderRadius:6,fontSize:11,fontWeight:600,
+                              background:m.color,color:C.bg,border:'none',cursor:'pointer',flexShrink:0}}>
+                            ✓
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{display:'flex',alignItems:'baseline',gap:3,marginBottom:4}}>
+                          <span style={{fontSize:26,fontWeight:700,
+                            color:isOverride?m.color:C.text,lineHeight:1}}>
+                            {val}
+                          </span>
+                          <span style={{fontSize:11,color:C.muted}}>{m.unit}</span>
+                          {isOverride && (
+                            <span style={{fontSize:9,color:m.color,marginLeft:2}}>✎</span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Kcal-Anteil */}
+                      {pctOfKcal !== null && (
+                        <div style={{marginBottom:6}}>
+                          <div style={{display:'flex',justifyContent:'space-between',
+                            fontSize:9,color:C.faint,marginBottom:2}}>
+                            <span>{m.key==='fat'?val*9:val*4} kcal</span>
+                            <span>{pctOfKcal}%</span>
+                          </div>
+                          <div style={{height:2,borderRadius:1,background:C.faint}}>
+                            <div style={{width:`${Math.min(100,pctOfKcal)}%`,height:'100%',
+                              borderRadius:1,background:m.color}}/>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Bearbeiten-Button / Hint */}
+                      {!isEditing && (
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                          <span style={{fontSize:9,color:C.faint,lineHeight:1.4,flex:1,paddingRight:4}}>
+                            {isOverride
+                              ? <span style={{color:m.color+'AA'}}>Manuell · berechnet: {calcVal}g</span>
+                              : m.hint}
+                          </span>
+                          <button
+                            onClick={()=>{ setEM(m.key); setEV(String(val)); }}
+                            style={{fontSize:10,color:C.faint,background:`${C.faint}18`,
+                              border:`1px solid ${C.faint}30`,borderRadius:5,
+                              padding:'3px 7px',cursor:'pointer',flexShrink:0,fontFamily:'inherit'}}>
+                            ✎
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* ── Makro-Verteilungs-Balken ── */}
+              <div style={{...ST.card,padding:'12px 14px',marginBottom:14}}>
+                <div style={{fontSize:10,color:C.muted,letterSpacing:0.6,marginBottom:8}}>
+                  Kalorienverteilung
+                </div>
+                {/* Stacked Bar */}
+                <div style={{display:'flex',height:10,borderRadius:5,overflow:'hidden',marginBottom:8}}>
+                  <div style={{width:`${vert.p}%`,background:C.sport,transition:'width 0.3s'}}/>
+                  <div style={{width:`${vert.c}%`,background:C.water,transition:'width 0.3s'}}/>
+                  <div style={{width:`${vert.f}%`,background:C.mood,  transition:'width 0.3s'}}/>
+                </div>
+                <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+                  {[
+                    [C.sport, `Eiweiß ${vert.p}%`,         `${final.protein}g`],
+                    [C.water, `Kohlenhydrate ${vert.c}%`,  `${final.carbs}g`],
+                    [C.mood,  `Fett ${vert.f}%`,           `${final.fat}g`],
+                  ].map(([col,lbl,val2])=>(
+                    <div key={lbl} style={{display:'flex',alignItems:'center',gap:5}}>
+                      <div style={{width:8,height:8,borderRadius:2,background:col,flexShrink:0}}/>
+                      <span style={{fontSize:10,color:C.muted}}>{lbl}</span>
+                      <span style={{fontSize:10,color:C.text,fontWeight:600}}>{val2}</span>
+                    </div>
+                  ))}
+                </div>
+                {/* Wasser-Empfehlung */}
+                <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}33`,
+                  display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span style={{fontSize:10,color:C.water}}>💧 Wasserempfehlung</span>
+                  <span style={{fontSize:11,fontWeight:600,color:C.water}}>{final.water} ml/Tag</span>
+                </div>
+              </div>
+
+              {/* ── Wissen kompakt ── */}
+              <div style={{fontSize:10,color:C.faint,lineHeight:1.7,marginBottom:14,
+                padding:'8px 12px',background:C.cardAlt,borderRadius:8,border:`1px solid ${C.border}`}}>
+                <strong style={{color:C.muted}}>Methode:</strong> Mifflin-St-Jeor BMR × PAL (Aktivitätsfaktor).<br/>
+                <strong style={{color:C.muted}}>Protein:</strong> ISSN 2017 — {goal<-200?'2.2':'goal'>0?'2.0':'1.8'}g/kg für dein Ziel.<br/>
+                <strong style={{color:C.muted}}>Fett:</strong> DGE — min. 0.8g/kg, Ziel 27% der Kalorien.<br/>
+                <strong style={{color:C.muted}}>Carbs:</strong> Restkalorien · <strong style={{color:C.muted}}>Ballaststoffe:</strong> DGE min. 30g/Tag.
+              </div>
+            </>}
+
+            {/* ── Ziele übernehmen ── */}
+            <button style={{...ST.btn(C.accent),marginBottom:8}}
+              onClick={()=>{
+                const f = final || {};
+                onUpdateSettings({
+                  sex, alter:+age||null, lastAct:act, lastGoal:goal,
+                  ...(f.protein ? {proteinZiel:        f.protein}  : {}),
+                  ...(f.carbs   ? {kohlenhydrateZiel:  f.carbs}    : {}),
+                  ...(f.fat     ? {fettZiel:            f.fat}      : {}),
+                  ...(f.fiber   ? {ballaststoffeZiel:   f.fiber}    : {}),
+                  ...(f.water   ? {wasserZiel:          f.water}    : {}),
+                });
+                onSave(result);
+              }}>
+              {result.toLocaleString('de-DE')} kcal + Makros als Ziele setzen
+            </button>
+            <button style={{...ST.outbtn(C.muted)}}
+              onClick={()=>{
+                onUpdateSettings({sex,alter:+age||null,lastAct:act,lastGoal:goal});
+                onSave(result);
+              }}>
+              Nur Kalorien übernehmen
+            </button>
+          </>;
+        })() : (
           <div style={{textAlign:'center',padding:'20px',color:C.danger,fontSize:13,lineHeight:1.6}}>
             Bitte Alter in Schritt 1 eingeben —<br/>ohne Alter kann der Grundumsatz nicht berechnet werden.
           </div>
@@ -3333,17 +3622,33 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
       title: 'Ernährungs­ziele',
       summary: s => {
         const kcal = s.kalorienZiel||2000;
+        const p = s.proteinZiel>0 ? ` · ${s.proteinZiel}g P` : '';
         const w = s.wasserZiel||2000;
-        return `${kcal} kcal · ${w} ml Wasser`;
+        return `${kcal} kcal${p} · ${w} ml`;
       },
-      viewRows: s => [
-        { label:'Kalorien',      value: `${s.kalorienZiel||2000}`,  unit:'kcal/Tag' },
-        { label:'Wasser',        value: `${s.wasserZiel||2000}`,    unit:'ml/Tag' },
-        { label:'Eiweiß',        value: s.proteinZiel>0 ? String(s.proteinZiel) : 'kein Ziel', unit: s.proteinZiel>0?'g':'' },
-        { label:'Kohlenhydrate', value: s.kohlenhydrateZiel>0 ? String(s.kohlenhydrateZiel) : 'kein Ziel', unit: s.kohlenhydrateZiel>0?'g':'' },
-        { label:'Fett',          value: s.fettZiel>0 ? String(s.fettZiel) : 'kein Ziel', unit: s.fettZiel>0?'g':'' },
-        { label:'Ballaststoffe', value: s.ballaststoffeZiel>0 ? String(s.ballaststoffeZiel) : 'kein Ziel', unit: s.ballaststoffeZiel>0?'g':'' },
-      ],
+      viewRows: s => {
+        // Auto-berechnet falls Körperdaten vorhanden
+        const w = lastWeight || s.startWeight;
+        const autoM = (s.kalorienZiel && w)
+          ? berechneMakros(s.kalorienZiel, w, s.lastGoal||0)
+          : null;
+        const fmt = (val, autoVal, unit) => {
+          if (val > 0) return { value: `${val}`, unit, auto: autoVal ? `Empfohlen: ${autoVal}g` : null };
+          return { value: autoVal ? `${autoVal} (empfohlen)` : 'kein Ziel', unit: '', auto: null };
+        };
+        const p = fmt(s.proteinZiel, autoM?.protein, 'g');
+        const c = fmt(s.kohlenhydrateZiel, autoM?.carbs, 'g');
+        const f = fmt(s.fettZiel, autoM?.fat, 'g');
+        const fi= fmt(s.ballaststoffeZiel, autoM?.fiber, 'g');
+        return [
+          { label:'Kalorien',      value: `${s.kalorienZiel||2000}`, unit:'kcal/Tag' },
+          { label:'Wasser',        value: `${s.wasserZiel||2000}`,   unit:'ml/Tag' },
+          { label:'Eiweiß',        value: p.value,  unit: p.unit  },
+          { label:'Kohlenhydrate', value: c.value,  unit: c.unit  },
+          { label:'Fett',          value: f.value,  unit: f.unit  },
+          { label:'Ballaststoffe', value: fi.value, unit: fi.unit },
+        ];
+      },
       editFields: [
         { key:'kalorienZiel',        label:'Kalorien (kcal/Tag)',    type:'number', mode:'numeric', placeholder:'2000' },
         { key:'wasserZiel',          label:'Wasser (ml/Tag)',        type:'number', mode:'numeric', placeholder:'2000' },
@@ -3351,6 +3656,7 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
         { key:'kohlenhydrateZiel',   label:'Kohlenhydrate (g)',      type:'number', mode:'numeric', placeholder:'kein Ziel' },
         { key:'fettZiel',            label:'Fett (g)',               type:'number', mode:'numeric', placeholder:'kein Ziel' },
         { key:'ballaststoffeZiel',   label:'Ballaststoffe (g)',      type:'number', mode:'numeric', placeholder:'kein Ziel' },
+        { key:'_auto_macro_btn',     label:'', type:'auto_macro_btn' },
       ],
       hint: '0 = kein Ziel gesetzt, wird nicht im Dashboard angezeigt',
     },
@@ -3409,7 +3715,7 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
         { label:'Einträge gesamt',  value: String(totalEntries) },
         { label:'Tage getrackt',    value: String(trackingDays) },
         { label:'Metriken aktiv',   value: String(Object.keys(METRICS).filter(k=>entries.some(e=>e.type===k)).length) },
-        { label:'Version',          value: 'v5.3' },
+        { label:'Version',          value: 'v5.6' },
         { label:'Speicher',         value: 'localStorage · lokal' },
       ],
       readOnly: true,
@@ -3536,6 +3842,55 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
         />
       </div>
     );
+
+    // ── Auto-Makro-Button (nur im Profil Ernährungsziele) ──────────────────
+    if (field.type === 'auto_macro_btn') {
+      const kcal = +(draft.kalorienZiel ?? settings.kalorienZiel ?? 2000);
+      const w    = lastWeight || settings.startWeight;
+      const goalD= settings.lastGoal ?? 0;
+      const autoM = kcal && w ? berechneMakros(kcal, w, goalD) : null;
+      if (!autoM) return (
+        <div key={field.key} style={{fontSize:10,color:C.faint,marginBottom:14,lineHeight:1.5,
+          padding:'8px 10px',background:C.cardAlt,borderRadius:6}}>
+          Für automatische Makro-Berechnung: Körperdaten (Gewicht) und Kalorien eintragen.
+        </div>
+      );
+      return (
+        <div key={field.key} style={{marginBottom:14}}>
+          <div style={{fontSize:10,color:C.muted,letterSpacing:0.6,marginBottom:8}}>
+            Automatisch berechnet für {kcal} kcal · {w} kg
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:8}}>
+            {[
+              ['Eiweiß',        autoM.protein, 'proteinZiel',        C.sport],
+              ['Kohlenhydrate', autoM.carbs,   'kohlenhydrateZiel',  C.water],
+              ['Fett',          autoM.fat,     'fettZiel',           C.mood],
+              ['Ballaststoffe', autoM.fiber,   'ballaststoffeZiel',  C.success],
+            ].map(([label, val, key, col]) => (
+              <div key={key} style={{padding:'8px 10px',borderRadius:8,
+                background:`${col}10`,border:`1px solid ${col}30`,
+                display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div>
+                  <div style={{fontSize:9,color:col,letterSpacing:0.4,textTransform:'uppercase',marginBottom:1}}>{label}</div>
+                  <div style={{fontSize:16,fontWeight:700,color:C.text}}>{val}<span style={{fontSize:10,color:C.muted,marginLeft:2}}>g</span></div>
+                </div>
+                <button onClick={()=>setDraft(dr=>({...dr,[key]:val}))}
+                  style={{fontSize:9,padding:'3px 6px',borderRadius:5,border:`1px solid ${col}50`,
+                    background:`${col}20`,color:col,cursor:'pointer',fontFamily:'inherit',fontWeight:600}}>
+                  ↓
+                </button>
+              </div>
+            ))}
+          </div>
+          <button onClick={()=>setDraft(dr=>({...dr,
+            proteinZiel:autoM.protein, kohlenhydrateZiel:autoM.carbs,
+            fettZiel:autoM.fat, ballaststoffeZiel:autoM.fiber, wasserZiel:autoM.water}))}
+            style={{...ST.outbtn(C.water),padding:'8px 0',fontSize:12,width:'100%'}}>
+            ✦ Alle automatisch übernehmen
+          </button>
+        </div>
+      );
+    }
   };
 
   // ── Render-Helfer: View-Zeile ─────────────────────────────────────────────
@@ -4989,7 +5344,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v5.5</span>
+          <span>v5.6</span>
         </div>
       </header>
 
