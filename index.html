@@ -291,6 +291,192 @@ const LMDB_PLACEHOLDER = [
 const pn = v => +(parseFloat(v)||0);
 
 
+// ══════════════════════════════════════════════════════════════════════════════
+// REFERENZ-PORTIONEN-SYSTEM
+//
+// Datenmodell: Pro Produkt können mehrere benannte Portionen hinterlegt sein.
+// Jede Portion definiert:
+//   label  — Anzeigename ("1 Tasse", "1 Becher")
+//   g      — Gramm- oder ml-Äquivalent für die Berechnung
+//   icon   — Emoji für schnelle visuelle Erkennung
+//
+// Umrechnungsformel (gilt für alle Portionen):
+//   nährwert = (nährwert_pro_100g × portionGramm × anzahl) / 100
+//
+// Auflösungsreihenfolge in getPortionsForProduct():
+//   1. Explizites `portions`-Feld im Produkteintrag (höchste Priorität)
+//   2. Name-basierter Match gegen PORTIONS_CATALOG (partial, case-insensitive)
+//   3. Kategorie-basierter Fallback
+//   4. Flüssigkeits-Fallback (liq:true)
+//   5. Keine Portionen → nur Gramm-Eingabe
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Portionen-Katalog — Name-basierte Lookups ─────────────────────────────────
+// Key: Kleinbuchstaben-Substring des Produktnamens
+// Value: Array von {label, g, icon}
+const PORTIONS_CATALOG = {
+  // ── Getreide & Brot ─────────────────────────────────────────────────────
+  'haferflocken':    [{ label:'1 Portion (40g)', g:40, icon:'🥣' }, { label:'1 Portion (60g)', g:60, icon:'🥣' }, { label:'1 Portion (80g)', g:80, icon:'🥣' }],
+  'müsli':          [{ label:'1 Portion (50g)', g:50, icon:'🥣' }, { label:'1 Portion (70g)', g:70, icon:'🥣' }],
+  'cornflakes':     [{ label:'1 Portion (30g)', g:30, icon:'🥣' }, { label:'1 Portion (50g)', g:50, icon:'🥣' }],
+  'granola':        [{ label:'1 Portion (50g)', g:50, icon:'🥣' }],
+  'toastbrot':      [{ label:'1 Scheibe (25g)', g:25, icon:'🍞' }, { label:'2 Scheiben', g:50, icon:'🍞' }],
+  'vollkornbrot':   [{ label:'1 Scheibe (40g)', g:40, icon:'🍞' }, { label:'2 Scheiben', g:80, icon:'🍞' }],
+  'roggenbrot':     [{ label:'1 Scheibe (40g)', g:40, icon:'🍞' }, { label:'2 Scheiben', g:80, icon:'🍞' }],
+  'brötchen':       [{ label:'1 Brötchen', g:60, icon:'🫓' }],
+  'semmel':         [{ label:'1 Semmel', g:60, icon:'🫓' }],
+  'brezel':         [{ label:'1 Brezel', g:100, icon:'🥨' }],
+  'pasta':          [{ label:'1 Portion roh (80g)', g:80, icon:'🍝' }, { label:'1 Portion (100g)', g:100, icon:'🍝' }, { label:'1 Portion (120g)', g:120, icon:'🍝' }],
+  'reis':           [{ label:'1 Portion roh (75g)', g:75, icon:'🍚' }, { label:'1 Portion (100g)', g:100, icon:'🍚' }],
+  'kartoffel':      [{ label:'1 kl. Kartoffel (100g)', g:100, icon:'🥔' }, { label:'1 gr. Kartoffel (200g)', g:200, icon:'🥔' }],
+
+  // ── Milchprodukte ───────────────────────────────────────────────────────
+  'joghurt':        [{ label:'1 Becher (150g)', g:150, icon:'🥛' }, { label:'1 Becher (200g)', g:200, icon:'🥛' }],
+  'skyr':           [{ label:'1 Becher (150g)', g:150, icon:'🥛' }, { label:'1 Becher (500g)', g:500, icon:'🥛' }],
+  'quark':          [{ label:'1 Becher (250g)', g:250, icon:'🥛' }, { label:'1 Portion (150g)', g:150, icon:'🥛' }],
+  'frischkäse':     [{ label:'1 EL (15g)', g:15, icon:'🧀' }, { label:'1 Portion (30g)', g:30, icon:'🧀' }],
+  'butter':         [{ label:'1 TL (5g)', g:5, icon:'🧈' }, { label:'1 EL (15g)', g:15, icon:'🧈' }],
+  'parmesan':       [{ label:'1 EL gerieben (10g)', g:10, icon:'🧀' }, { label:'2 EL gerieben (20g)', g:20, icon:'🧀' }],
+  'mozzarella':     [{ label:'½ Kugel (60g)', g:60, icon:'🧀' }, { label:'1 Kugel (125g)', g:125, icon:'🧀' }],
+  'gouda':          [{ label:'1 Scheibe (25g)', g:25, icon:'🧀' }, { label:'2 Scheiben', g:50, icon:'🧀' }],
+  'emmentaler':     [{ label:'1 Scheibe (25g)', g:25, icon:'🧀' }, { label:'2 Scheiben', g:50, icon:'🧀' }],
+  'feta':           [{ label:'1 Portion (50g)', g:50, icon:'🧀' }, { label:'1 Würfel (30g)', g:30, icon:'🧀' }],
+  'sahne':          [{ label:'1 EL (15ml)', g:15, icon:'🥛' }, { label:'1 Portion (30ml)', g:30, icon:'🥛' }],
+  'milch':          [{ label:'1 Glas (200ml)', g:200, icon:'🥛' }, { label:'1 Tasse (150ml)', g:150, icon:'🥛' }, { label:'1 Schluck (50ml)', g:50, icon:'🥛' }],
+
+  // ── Eier ────────────────────────────────────────────────────────────────
+  'eiklar':         [{ label:'1 Eiklar (35g)', g:35, icon:'🥚' }, { label:'2 Eiklar', g:70, icon:'🥚' }],
+  ' ei ':           [{ label:'1 Ei (S, 45g)', g:45, icon:'🥚' }, { label:'1 Ei (M, 60g)', g:60, icon:'🥚' }, { label:'1 Ei (L, 70g)', g:70, icon:'🥚' }],
+  'ei (':           [{ label:'1 Ei (S, 45g)', g:45, icon:'🥚' }, { label:'1 Ei (M, 60g)', g:60, icon:'🥚' }, { label:'1 Ei (L, 70g)', g:70, icon:'🥚' }],
+
+  // ── Fleisch & Fisch ─────────────────────────────────────────────────────
+  'hähnchenbrust':  [{ label:'½ Brust (100g)', g:100, icon:'🍗' }, { label:'1 Brust (150g)', g:150, icon:'🍗' }, { label:'1 gr. Brust (200g)', g:200, icon:'🍗' }],
+  'putenbrust':     [{ label:'1 Scheibe (50g)', g:50, icon:'🥩' }, { label:'1 Portion (120g)', g:120, icon:'🥩' }],
+  'lachs':          [{ label:'1 Portion (100g)', g:100, icon:'🐟' }, { label:'1 Filet (150g)', g:150, icon:'🐟' }],
+  'thunfisch':      [{ label:'1 Dose (140g)', g:140, icon:'🐟' }, { label:'½ Dose (70g)', g:70, icon:'🐟' }],
+  'garnelen':       [{ label:'1 Portion (100g)', g:100, icon:'🦐' }, { label:'1 Portion (150g)', g:150, icon:'🦐' }],
+  'hackfleisch':    [{ label:'1 Portion (100g)', g:100, icon:'🥩' }, { label:'1 Burger-Patty (120g)', g:120, icon:'🥩' }],
+  'würstchen':      [{ label:'1 Würstchen (70g)', g:70, icon:'🌭' }, { label:'2 Würstchen', g:140, icon:'🌭' }],
+  'kochschinken':   [{ label:'1 Scheibe (30g)', g:30, icon:'🥩' }, { label:'2 Scheiben', g:60, icon:'🥩' }],
+  'salami':         [{ label:'1 Scheibe (10g)', g:10, icon:'🥩' }, { label:'3 Scheiben', g:30, icon:'🥩' }],
+  'leberwurst':     [{ label:'1 Portion (30g)', g:30, icon:'🥩' }],
+
+  // ── Obst ────────────────────────────────────────────────────────────────
+  'apfel':          [{ label:'1 kl. Apfel (120g)', g:120, icon:'🍎' }, { label:'1 gr. Apfel (180g)', g:180, icon:'🍎' }],
+  'banane':         [{ label:'1 kl. Banane (100g)', g:100, icon:'🍌' }, { label:'1 gr. Banane (150g)', g:150, icon:'🍌' }],
+  'orange':         [{ label:'1 Orange (180g)', g:180, icon:'🍊' }],
+  'kiwi':           [{ label:'1 Kiwi (70g)', g:70, icon:'🥝' }],
+  'erdbeeren':      [{ label:'1 Handvoll (80g)', g:80, icon:'🍓' }, { label:'1 Portion (150g)', g:150, icon:'🍓' }],
+  'blaubeeren':     [{ label:'1 Handvoll (70g)', g:70, icon:'🫐' }, { label:'1 Portion (125g)', g:125, icon:'🫐' }],
+  'mango':          [{ label:'½ Mango (150g)', g:150, icon:'🥭' }, { label:'1 Mango (300g)', g:300, icon:'🥭' }],
+  'avocado':        [{ label:'½ Avocado (75g)', g:75, icon:'🥑' }, { label:'1 Avocado (150g)', g:150, icon:'🥑' }],
+  'trauben':        [{ label:'1 Handvoll (80g)', g:80, icon:'🍇' }, { label:'1 Portion (150g)', g:150, icon:'🍇' }],
+  'wassermelone':   [{ label:'1 Scheibe (300g)', g:300, icon:'🍉' }],
+  'ananas':         [{ label:'1 Scheibe (80g)', g:80, icon:'🍍' }, { label:'1 Portion (150g)', g:150, icon:'🍍' }],
+
+  // ── Nüsse & Samen ───────────────────────────────────────────────────────
+  'mandeln':        [{ label:'1 Handvoll (30g)', g:30, icon:'🥜' }, { label:'10 Mandeln (12g)', g:12, icon:'🥜' }],
+  'walnüsse':       [{ label:'3 Hälften (15g)', g:15, icon:'🥜' }, { label:'1 Handvoll (30g)', g:30, icon:'🥜' }],
+  'cashew':         [{ label:'1 Handvoll (30g)', g:30, icon:'🥜' }, { label:'10 Stück (15g)', g:15, icon:'🥜' }],
+  'erdnuss':        [{ label:'1 Handvoll (30g)', g:30, icon:'🥜' }],
+  'erdnussbutter':  [{ label:'1 TL (10g)', g:10, icon:'🥜' }, { label:'1 EL (20g)', g:20, icon:'🥜' }, { label:'2 EL (40g)', g:40, icon:'🥜' }],
+
+  // ── Öle & Fette ─────────────────────────────────────────────────────────
+  'olivenöl':       [{ label:'1 TL (5ml)', g:5, icon:'🫙' }, { label:'1 EL (15ml)', g:15, icon:'🫙' }],
+  'rapsöl':         [{ label:'1 TL (5ml)', g:5, icon:'🫙' }, { label:'1 EL (15ml)', g:15, icon:'🫙' }],
+
+  // ── Süßes & Snacks ──────────────────────────────────────────────────────
+  'schokolade':     [{ label:'1 Riegel (25g)', g:25, icon:'🍫' }, { label:'3 Stücke (15g)', g:15, icon:'🍫' }, { label:'½ Tafel (50g)', g:50, icon:'🍫' }],
+  'nutella':        [{ label:'1 TL (10g)', g:10, icon:'🍫' }, { label:'1 EL (20g)', g:20, icon:'🍫' }],
+  'chips':          [{ label:'1 Portion (25g)', g:25, icon:'🥔' }, { label:'1 Portion (40g)', g:40, icon:'🥔' }],
+  'gummibärchen':   [{ label:'1 Handvoll (30g)', g:30, icon:'🍬' }, { label:'5 Stück (10g)', g:10, icon:'🍬' }],
+  'keks':           [{ label:'1 Keks (10g)', g:10, icon:'🍪' }, { label:'3 Kekse (30g)', g:30, icon:'🍪' }],
+  'butterkeks':     [{ label:'1 Keks (8g)', g:8, icon:'🍪' }, { label:'3 Kekse (24g)', g:24, icon:'🍪' }],
+  'müsliriegel':    [{ label:'1 Riegel (35g)', g:35, icon:'🍫' }],
+  'snickers':       [{ label:'1 Riegel (50g)', g:50, icon:'🍫' }, { label:'½ Riegel (25g)', g:25, icon:'🍫' }],
+  'kitkat':         [{ label:'1 Finger (15g)', g:15, icon:'🍫' }, { label:'2 Finger (30g)', g:30, icon:'🍫' }],
+  'twix':           [{ label:'1 Riegel (50g)', g:50, icon:'🍫' }],
+
+  // ── Getränke ────────────────────────────────────────────────────────────
+  'kaffee':         [{ label:'1 Espresso (30ml)', g:30, icon:'☕' }, { label:'1 Tasse (150ml)', g:150, icon:'☕' }, { label:'1 Kaffee (200ml)', g:200, icon:'☕' }],
+  'latte':          [{ label:'1 Glas kl. (200ml)', g:200, icon:'☕' }, { label:'1 Glas gr. (350ml)', g:350, icon:'☕' }],
+  'cola':           [{ label:'1 Dose (330ml)', g:330, icon:'🥤' }, { label:'1 Glas (200ml)', g:200, icon:'🥤' }, { label:'1 Flasche (500ml)', g:500, icon:'🥤' }],
+  'fanta':          [{ label:'1 Dose (330ml)', g:330, icon:'🥤' }, { label:'1 Glas (200ml)', g:200, icon:'🥤' }],
+  'sprite':         [{ label:'1 Dose (330ml)', g:330, icon:'🥤' }, { label:'1 Glas (200ml)', g:200, icon:'🥤' }],
+  'pepsi':          [{ label:'1 Dose (330ml)', g:330, icon:'🥤' }, { label:'1 Glas (200ml)', g:200, icon:'🥤' }],
+  'red bull':       [{ label:'1 Dose (250ml)', g:250, icon:'🥤' }],
+  'orangensaft':    [{ label:'1 Glas (200ml)', g:200, icon:'🧃' }, { label:'1 Glas (250ml)', g:250, icon:'🧃' }],
+  'apfelsaft':      [{ label:'1 Glas (200ml)', g:200, icon:'🧃' }, { label:'1 Glas (250ml)', g:250, icon:'🧃' }],
+  'bier':           [{ label:'1 Flasche (330ml)', g:330, icon:'🍺' }, { label:'½ Liter', g:500, icon:'🍺' }, { label:'1 Maß (1000ml)', g:1000, icon:'🍺' }],
+  'rotwein':        [{ label:'1 Glas (125ml)', g:125, icon:'🍷' }, { label:'1 Glas gr. (200ml)', g:200, icon:'🍷' }],
+  'weißwein':       [{ label:'1 Glas (125ml)', g:125, icon:'🥂' }, { label:'1 Glas gr. (200ml)', g:200, icon:'🥂' }],
+  'haferdrink':     [{ label:'1 Glas (200ml)', g:200, icon:'🥛' }, { label:'1 Portion (250ml)', g:250, icon:'🥛' }],
+  'sojamilch':      [{ label:'1 Glas (200ml)', g:200, icon:'🥛' }, { label:'1 Tasse (150ml)', g:150, icon:'🥛' }],
+  'mandeldrink':    [{ label:'1 Glas (200ml)', g:200, icon:'🥛' }, { label:'1 Tasse (150ml)', g:150, icon:'🥛' }],
+
+  // ── Sonstiges ───────────────────────────────────────────────────────────
+  'ketchup':        [{ label:'1 EL (15g)', g:15, icon:'🍅' }, { label:'1 Portion (25g)', g:25, icon:'🍅' }],
+  'mayonnaise':     [{ label:'1 TL (5g)', g:5, icon:'🫙' }, { label:'1 EL (15g)', g:15, icon:'🫙' }],
+  'tofu':           [{ label:'½ Block (100g)', g:100, icon:'🫙' }, { label:'1 Portion (150g)', g:150, icon:'🫙' }],
+};
+
+// ── Kategorie-Fallbacks ───────────────────────────────────────────────────────
+const PORTIONS_BY_CAT = {
+  'Milch & Käse': [{ label:'1 Portion (100g)', g:100, icon:'🥛' }, { label:'1 Becher (200g)', g:200, icon:'🥛' }],
+  'Getränke':     [{ label:'1 Glas (200ml)', g:200, icon:'🥤' }, { label:'1 Flasche (330ml)', g:330, icon:'🥤' }, { label:'1 Flasche (500ml)', g:500, icon:'🥤' }],
+  'Obst':         [{ label:'1 Portion (100g)', g:100, icon:'🍎' }, { label:'1 Portion (150g)', g:150, icon:'🍎' }],
+  'Gemüse':       [{ label:'1 Portion (80g)', g:80, icon:'🥗' }, { label:'1 Portion (150g)', g:150, icon:'🥗' }],
+  'Eier':         [{ label:'1 Ei (M, 60g)', g:60, icon:'🥚' }, { label:'2 Eier', g:120, icon:'🥚' }],
+  'Brot & Getreide': [{ label:'1 Portion (50g)', g:50, icon:'🍞' }, { label:'1 Portion (80g)', g:80, icon:'🍞' }],
+  'Süßes & Snacks':  [{ label:'1 Stück (15g)', g:15, icon:'🍪' }, { label:'1 Portion (30g)', g:30, icon:'🍪' }],
+  'Nüsse & Samen':   [{ label:'1 Handvoll (30g)', g:30, icon:'🥜' }],
+  'Fleisch & Fisch': [{ label:'1 Portion (100g)', g:100, icon:'🍗' }, { label:'1 Portion (150g)', g:150, icon:'🍗' }],
+  'Wurst & Aufschnitt': [{ label:'1 Scheibe (30g)', g:30, icon:'🥩' }, { label:'2 Scheiben', g:60, icon:'🥩' }],
+};
+
+// ── Portionen-Auflösung ───────────────────────────────────────────────────────
+// Gibt Array von {label, g, icon} zurück, oder [] wenn keine Portionen gefunden
+function getPortionsForProduct(product) {
+  // 1. Explizites portions-Feld (höchste Prio — z.B. aus OpenFoodFacts)
+  if (product.portions?.length) return product.portions;
+
+  // 2. Name-basierter Match (partial, case-insensitive)
+  const name = (product.name || product.n || '').toLowerCase();
+  for (const [key, portions] of Object.entries(PORTIONS_CATALOG)) {
+    if (name.includes(key)) return portions;
+  }
+
+  // 3. Kategorie-Match
+  const cat = product.cat || product.category || '';
+  if (PORTIONS_BY_CAT[cat]) return PORTIONS_BY_CAT[cat];
+
+  // 4. Flüssigkeits-Fallback
+  if (product.isLiq || product.liq) {
+    return [
+      { label:'1 Glas (200ml)', g:200, icon:'🥤' },
+      { label:'1 Flasche (330ml)', g:330, icon:'🥤' },
+      { label:'1 Flasche (500ml)', g:500, icon:'🥤' },
+    ];
+  }
+
+  // 5. Keine Portionen → nur manuelle Gramm-Eingabe
+  return [];
+}
+
+// Hilfsfunktion: Nährwert aus per-100-Wert und Gramm berechnen
+// formula: nutrient = (value_per_100 × grams) / 100
+function calcNutrientFromGrams(per100, grams) {
+  return {
+    kcal:    Math.round(per100.kcal    * grams / 100),
+    protein: +((per100.protein || 0) * grams / 100).toFixed(1),
+    carbs:   +((per100.carbs   || 0) * grams / 100).toFixed(1),
+    fat:     +((per100.fat     || 0) * grams / 100).toFixed(1),
+    sugar:   +((per100.sugar   || 0) * grams / 100).toFixed(1),
+    fiber:   +((per100.fiber   || 0) * grams / 100).toFixed(1),
+  };
+}
+
+
 // ── Workout type → label ──────────────────────────────────────────────────────
 const ACTIVITY_MAP = {
   HKWorkoutActivityTypeRunning:'Laufen', HKWorkoutActivityTypeCycling:'Radfahren',
@@ -1764,67 +1950,208 @@ async function detectFromImage(imageEl) {
   return null;
 }
 
-// ── Produkt-Detail-View (geteilt von Scan + Suche) ────────────────────────────
+// ── Produkt-Detail-View (mit Referenz-Portionen) ─────────────────────────────
 function ProductDetail({ product, barcode, onConfirm, onBack }) {
-  const [qty,  setQty]  = useState('100');
-  const [unit, setUnit] = useState(product.isLiq ? 'ml' : 'g');
-  const presets = product.isLiq ? [100,200,250,330,500] : [25,50,100,150,200];
+  // ── Portionen für dieses Produkt auflösen ─────────────────────────────────
+  const portions = getPortionsForProduct(product);
+  const hasPortions = portions.length > 0;
 
-  const calc = () => {
-    const q=Math.max(+qty||1,1), p=product.per100;
-    return { kcal:Math.round(p.kcal*q/100), protein:+(p.protein*q/100).toFixed(1),
-             carbs:+(p.carbs*q/100).toFixed(1), fat:+(p.fat*q/100).toFixed(1) };
-  };
+  // ── State ─────────────────────────────────────────────────────────────────
+  // Modus: 'portions' (Portionen-Auswahl) oder 'manual' (Gramm-Eingabe)
+  const [mode,    setMode]  = useState(hasPortions ? 'portions' : 'manual');
+  const [selP,    setSelP]  = useState(portions[0] || null);   // ausgewählte Portion
+  const [count,   setCount] = useState(1);                      // Anzahl Portionen
+  const [qty,     setQty]   = useState('100');                  // manuelle Gramm-Eingabe
+  const [unit,    setUnit]  = useState(product.isLiq ? 'ml' : 'g');
+
+  // ── Effektive Gramm berechnen ─────────────────────────────────────────────
+  // Umrechnungsformel: grams = portionGramm × anzahl  (Portions-Modus)
+  //                   grams = eingabe                 (Manual-Modus)
+  const effectiveGrams = mode === 'portions' && selP
+    ? selP.g * count
+    : (+qty || 0);
+
+  // Nährwerte live berechnen
+  const macros = calcNutrientFromGrams(product.per100, effectiveGrams);
+
+  // Portion-Label für gespeicherten Eintrag (Anzeige in Verlauf/Journal)
+  const portionLabel = mode === 'portions' && selP
+    ? (count === 1 ? selP.label : `${count}× ${selP.label}`)
+    : `${effectiveGrams}${unit}`;
+
+  // ── Speichern ─────────────────────────────────────────────────────────────
   const confirm = () => {
-    const n=calc();
-    onConfirm({ water:product.isLiq?(+qty||0):0, mealQ:3, calories:n.kcal,
-      protein:n.protein, carbs:n.carbs, fat:n.fat,
-      productName:product.name, brand:product.brand, quantity:+qty, unit, barcode, note:'' });
+    onConfirm({
+      water:       product.isLiq ? effectiveGrams : 0,
+      mealQ:       3,
+      calories:    macros.kcal,
+      protein:     macros.protein,
+      carbs:       macros.carbs,
+      fat:         macros.fat,
+      sugar:       macros.sugar,
+      fiber:       macros.fiber,
+      productName: product.name,
+      brand:       product.brand,
+      quantity:    effectiveGrams,
+      unit:        product.isLiq ? 'ml' : 'g',
+      portionLabel,                              // neu: Beschriftung für Anzeige
+      portionG:    selP?.g || null,              // neu: Basis-Portion in g
+      barcode,
+      note: '',
+    });
   };
-  const macros = calc();
-  const MRow = ({l,v,u,c})=>(<div style={{padding:'8px 10px',background:'#0A0806',borderRadius:8}}>
-    <div style={{fontSize:9,color:C.muted,letterSpacing:0.6,textTransform:'uppercase',marginBottom:2}}>{l}</div>
-    <div style={{fontSize:18,fontWeight:600,color:c,lineHeight:1}}>{v}</div>
-    <div style={{fontSize:10,color:C.muted}}>{u}</div>
-  </div>);
+
+  const MRow = ({l,v,u,c}) => (
+    <div style={{padding:'8px 10px',background:'#0A0806',borderRadius:8}}>
+      <div style={{fontSize:9,color:C.muted,letterSpacing:0.6,textTransform:'uppercase',marginBottom:2}}>{l}</div>
+      <div style={{fontSize:18,fontWeight:600,color:c,lineHeight:1}}>{v}</div>
+      <div style={{fontSize:10,color:C.muted}}>{u}</div>
+    </div>
+  );
 
   return <>
+    {/* ── Nährwert-Tabelle (pro 100g) ── */}
     <div style={{...ST.card,marginBottom:14}}>
       <div style={{fontSize:15,fontWeight:600,marginBottom:product.brand?2:8}}>{product.name}</div>
-      {product.brand&&<div style={{fontSize:12,color:C.muted,marginBottom:10}}>{product.brand}</div>}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'4px 16px',fontSize:12,paddingTop:8,borderTop:`1px solid ${C.border}`}}>
-        {[['Energie',product.per100.kcal,'kcal',C.accent],['Eiweiß',product.per100.protein,'g',C.sport],
-          ['Kohlenhydrate',product.per100.carbs,'g',C.water],['Fett',product.per100.fat,'g',C.mood],
-          ['Zucker',product.per100.sugar,'g',C.danger],['Ballaststoffe',product.per100.fiber,'g',C.steps],
-        ].map(([l,v,u,c])=>(<div key={l} style={{display:'flex',justifyContent:'space-between',padding:'3px 0'}}>
-          <span style={{color:C.muted}}>{l}</span><span style={{color:c,fontWeight:500}}>{v} {u}</span>
-        </div>))}
+      {product.brand && <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{product.brand}</div>}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'4px 16px',fontSize:12,
+        paddingTop:8,borderTop:`1px solid ${C.border}`}}>
+        {[
+          ['Energie',      product.per100.kcal,    'kcal', C.accent],
+          ['Eiweiß',       product.per100.protein, 'g',    C.sport],
+          ['Kohlenhydrate',product.per100.carbs,   'g',    C.water],
+          ['Fett',         product.per100.fat,     'g',    C.mood],
+          ['Zucker',       product.per100.sugar,   'g',    C.danger],
+          ['Ballaststoffe',product.per100.fiber,   'g',    C.steps],
+        ].map(([l,v,u,c]) => (
+          <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'3px 0'}}>
+            <span style={{color:C.muted}}>{l}</span>
+            <span style={{color:c,fontWeight:500}}>{v} {u}</span>
+          </div>
+        ))}
       </div>
       <div style={{fontSize:10,color:C.faint,marginTop:8}}>pro 100{product.isLiq?'ml':'g'}</div>
     </div>
 
-    <label style={ST.lbl}>Menge</label>
-    <div style={{display:'flex',gap:8,marginBottom:10,alignItems:'stretch'}}>
-      <input style={{...ST.inp,marginBottom:0,flex:1}} type="number" inputMode="numeric" value={qty} onChange={e=>setQty(e.target.value)}/>
-      <div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',flexShrink:0}}>
-        {['g','ml'].map(u=>(<button key={u} onClick={()=>setUnit(u)}
-          style={{padding:'0 14px',background:unit===u?`${C.water}20`:'transparent',
-            color:unit===u?C.water:C.muted,border:'none',fontSize:13,fontWeight:unit===u?600:400}}>{u}</button>))}
+    {/* ── Modus-Umschalter (nur wenn Portionen verfügbar) ── */}
+    {hasPortions && (
+      <div style={{display:'flex',gap:6,marginBottom:14}}>
+        {[['portions','📏 Portionen'],['manual','⚖️ Gramm eingeben']].map(([m,l]) => (
+          <button key={m} onClick={()=>setMode(m)}
+            style={{flex:1,padding:'8px 0',borderRadius:8,fontSize:12,cursor:'pointer',
+              fontFamily:'inherit',border:`1px solid ${mode===m?C.water:C.border}`,
+              background:mode===m?`${C.water}18`:'transparent',
+              color:mode===m?C.water:C.muted,fontWeight:mode===m?600:400}}>
+            {l}
+          </button>
+        ))}
       </div>
-    </div>
-    <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
-      {presets.map(q=>(<button key={q} onClick={()=>setQty(String(q))}
-        style={{padding:'4px 12px',borderRadius:6,fontSize:12,
-          border:`1px solid ${+qty===q?C.water:C.border}`,
-          background:+qty===q?`${C.water}18`:'transparent',
-          color:+qty===q?C.water:C.muted}}>{q}{unit}</button>))}
-    </div>
+    )}
+
+    {/* ══ Portionen-Modus ══ */}
+    {mode === 'portions' && (
+      <>
+        <label style={ST.lbl}>Portion wählen</label>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
+          {portions.map((p, i) => (
+            <button key={i}
+              onClick={() => { setSelP(p); setCount(1); }}
+              style={{
+                padding:'8px 12px', borderRadius:10, fontSize:12,
+                cursor:'pointer', fontFamily:'inherit', textAlign:'left',
+                border:`1px solid ${selP===p ? C.water : C.border}`,
+                background: selP===p ? `${C.water}18` : C.card,
+                color: selP===p ? C.water : C.muted,
+                fontWeight: selP===p ? 600 : 400,
+              }}>
+              <span style={{marginRight:5}}>{p.icon}</span>
+              {p.label}
+              <div style={{fontSize:10,color:selP===p?C.water+'AA':C.faint,marginTop:2}}>
+                {p.g}{product.isLiq?'ml':'g'}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Anzahl-Stepper */}
+        {selP && (
+          <>
+            <label style={ST.lbl}>Anzahl</label>
+            <div style={{display:'flex',alignItems:'center',gap:0,marginBottom:14,
+              background:C.card,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',
+              width:'fit-content'}}>
+              <button
+                onClick={() => setCount(c => Math.max(0.5, +(c - 0.5).toFixed(1)))}
+                style={{width:44,height:44,background:'none',border:'none',
+                  color:count<=0.5?C.faint:C.text,fontSize:20,cursor:'pointer',
+                  opacity:count<=0.5?0.3:1}}>−</button>
+              <div style={{minWidth:52,textAlign:'center',padding:'0 8px'}}>
+                <div style={{fontSize:18,fontWeight:700,color:C.text,lineHeight:1}}>{count}</div>
+                <div style={{fontSize:9,color:C.faint}}>×&nbsp;{selP.label.split('(')[0].trim()}</div>
+              </div>
+              <button
+                onClick={() => setCount(c => +(c + 0.5).toFixed(1))}
+                style={{width:44,height:44,background:'none',border:'none',
+                  color:C.text,fontSize:20,cursor:'pointer'}}>+</button>
+            </div>
+
+            {/* Konvertierungs-Anzeige */}
+            <div style={{fontSize:11,color:C.faint,marginBottom:14,
+              padding:'6px 10px',background:`${C.water}0A`,borderRadius:6,
+              border:`1px solid ${C.water}20`}}>
+              {count}× {selP.label} = <strong style={{color:C.water}}>
+                {effectiveGrams}{product.isLiq?'ml':'g'}
+              </strong>
+              &nbsp;·&nbsp;
+              <span style={{color:C.muted,fontFamily:'monospace',fontSize:10}}>
+                {effectiveGrams}g × {product.per100.kcal}kcal/100g = {macros.kcal}kcal
+              </span>
+            </div>
+          </>
+        )}
+      </>
+    )}
+
+    {/* ══ Manual-Modus (Gramm-Eingabe) ══ */}
+    {mode === 'manual' && (
+      <>
+        <label style={ST.lbl}>Menge</label>
+        <div style={{display:'flex',gap:8,marginBottom:10,alignItems:'stretch'}}>
+          <input style={{...ST.inp,marginBottom:0,flex:1}} type="number"
+            inputMode="numeric" value={qty} onChange={e=>setQty(e.target.value)}/>
+          <div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:8,
+            overflow:'hidden',flexShrink:0}}>
+            {['g','ml'].map(u => (
+              <button key={u} onClick={()=>setUnit(u)}
+                style={{padding:'0 14px',background:unit===u?`${C.water}20`:'transparent',
+                  color:unit===u?C.water:C.muted,border:'none',fontSize:13,
+                  fontWeight:unit===u?600:400,cursor:'pointer'}}>{u}</button>
+            ))}
+          </div>
+        </div>
+        {/* Schnellauswahl-Presets */}
+        <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
+          {(product.isLiq ? [100,150,200,250,330,500] : [25,50,75,100,150,200]).map(q => (
+            <button key={q} onClick={() => setQty(String(q))}
+              style={{padding:'4px 12px',borderRadius:6,fontSize:12,cursor:'pointer',
+                border:`1px solid ${+qty===q?C.water:C.border}`,
+                background:+qty===q?`${C.water}18`:'transparent',
+                color:+qty===q?C.water:C.muted}}>
+              {q}{unit}
+            </button>
+          ))}
+        </div>
+      </>
+    )}
+
+    {/* ── Live-Makro-Anzeige ── */}
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:16}}>
-      <MRow l="Kalorien"      v={macros.kcal}    u="kcal" c={C.accent}/>
-      <MRow l="Eiweiß"        v={macros.protein} u="g"    c={C.sport}/>
-      <MRow l="Kohlenhydrate" v={macros.carbs}   u="g"    c={C.water}/>
-      <MRow l="Fett"          v={macros.fat}     u="g"    c={C.mood}/>
+      <MRow l="Kalorien"       v={macros.kcal}    u="kcal" c={C.accent}/>
+      <MRow l="Eiweiß"         v={macros.protein} u="g"    c={C.sport}/>
+      <MRow l="Kohlenhydrate"  v={macros.carbs}   u="g"    c={C.water}/>
+      <MRow l="Fett"           v={macros.fat}     u="g"    c={C.mood}/>
     </div>
+
     <button style={ST.btn(C.water)} onClick={confirm}>Eintragen</button>
     <button style={{...ST.outbtn(C.muted),marginTop:8}} onClick={onBack}>Zurück</button>
   </>;
@@ -2152,7 +2479,7 @@ function preview(e) {
   if(e.type==='gewicht')    return `${d.weight} kg${d.bmi?`  ·  BMI ${d.bmi}`:''}`;
   if(e.type==='sport')      return `${d.sportType}  ·  ${d.duration} min`;
   if(e.type==='stimmung')   return `Stimmung ${d.mood}/10  ·  Energie ${d.energy}/10`;
-  if(e.type==='ernaehrung') { const tag=d.mealTag?d.mealTag+' · ':''; if(d.productName) return `${tag}${d.productName}${d.calories?' · '+d.calories+' kcal':''}`; return `${tag}${d.water} ml Wasser`; }
+  if(e.type==='ernaehrung') { const tag=d.mealTag?d.mealTag+' · ':''; if(d.productName) return `${tag}${d.productName}${d.portionLabel?' · '+d.portionLabel:d.calories?' · '+d.calories+' kcal':''}`; return `${tag}${d.water} ml Wasser`; }
   if(e.type==='herz')        return `${d.bpm} bpm${d.context?' · '+d.context:''}  ·  ${d.category||''}`;
   if(e.type==='blutdruck')   return `${d.sys}/${d.dia} mmHg${d.pulse?' · '+d.pulse+' bpm':''}  ·  ${d.classification||''}`;
   if(e.type==='koerpermass') { const parts=[]; if(d.taille)parts.push('Taille '+d.taille+'cm'); if(d.hufte)parts.push('Hüfte '+d.hufte+'cm'); if(d.whr)parts.push('WHR '+d.whr); return parts.join('  ·  ')||'Maße eingetragen'; }
@@ -4898,7 +5225,13 @@ function App() {
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.productName||'Manuell'}</div>
                       {d.brand&&<div style={{fontSize:10,color:C.muted}}>{d.brand}</div>}
-                      {d.quantity&&<div style={{fontSize:10,color:C.faint}}>{d.quantity} {d.unit}</div>}
+                      {d.portionLabel
+                        ? <div style={{fontSize:11,color:C.water,fontWeight:500,marginTop:1}}>
+                            📏 {d.portionLabel}
+                            {d.quantity && <span style={{color:C.faint}}> · {d.quantity}{d.unit}</span>}
+                          </div>
+                        : d.quantity&&<div style={{fontSize:10,color:C.faint}}>{d.quantity} {d.unit}</div>
+                      }
                     </div>
                     {d.calories>0&&<span style={{fontSize:14,fontWeight:700,color:C.accent,flexShrink:0}}>{d.calories} kcal</span>}
                   </div>
@@ -5344,7 +5677,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v5.6</span>
+          <span>v5.7</span>
         </div>
       </header>
 
