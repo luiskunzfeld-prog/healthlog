@@ -84,7 +84,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" crossorigin></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
-<script src="https://unpkg.com/@zxing/library@0.18.6/umd/index.min.js" crossorigin></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js" crossorigin></script>
 
 <script type="text/babel">
 const { useState, useEffect, useRef, useMemo, useCallback } = React;
@@ -1702,6 +1702,7 @@ function ErnaehrungForm({ add, initialData, onSave, onClose, entries }) {
   const [qty,      setQty]     = useState(String(initialData?.quantity||100));
   const [unit,     setUnit]    = useState(initialData?.unit||'g');
   const [scanErr,  setScanE]   = useState('');
+  const [scanManual, setScanManual] = useState(''); // EAN nach fehlgeschlagenem Scan auto-befüllen
   const [addedMsg, setAddedMsg]= useState('');   // ✓-Toast nach Eintragen
   const captureRef             = useRef(null);
   const abortRef               = useRef(null);
@@ -1804,7 +1805,7 @@ function ErnaehrungForm({ add, initialData, onSave, onClose, entries }) {
   // Ähnliche Produkte = restliche Suchergebnisse beim aktuell gewählten Produkt
   const similarProds = selProd ? results.filter(r => r.name !== selProd.name).slice(0,6) : [];
 
-  // ── Barcode — direkt OpenFoodFacts API ────────────────────────────────────
+  // ── Barcode — OpenFoodFacts API (DE zuerst, world als Fallback) ──────────
   const handleCapture = async e => {
     const file = e?.target?.files?.[0]; if (!file) return; e.target.value=''; setScanE('');
     try {
@@ -1813,18 +1814,44 @@ function ErnaehrungForm({ add, initialData, onSave, onClose, entries }) {
       await new Promise((ok,fail)=>{img.onload=ok;img.onerror=fail;img.src=url;});
       const hit = await detectFromImage(img).catch(()=>null);
       URL.revokeObjectURL(url);
-      if (!hit) { setScanE('Kein Barcode erkannt — bessere Beleuchtung versuchen'); return; }
+      if (!hit) {
+        setScanE('❌ Kein Barcode erkannt — Barcode gerade halten, gute Beleuchtung, nah rangehen.\n\nTipp: Barcode-Nummer manuell eintippen 👇');
+        return;
+      }
       setScanE('⏳ Produkt wird gesucht…');
-      const ctrl = new AbortController(); setTimeout(()=>ctrl.abort(),8000);
-      const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${hit.code}.json?fields=product_name,brands,nutriments,product_quantity_unit`,{signal:ctrl.signal});
-      const json = await res.json();
+      const ctrl = new AbortController(); setTimeout(()=>ctrl.abort(),10000);
+      // DE-Datenbank zuerst (besser für Supermarkt-Produkte in Deutschland)
+      let json = null;
+      try {
+        const deRes = await fetch(
+          `https://de.openfoodfacts.org/api/v2/product/${hit.code}.json?fields=product_name,brands,nutriments,product_quantity_unit`,
+          {signal: ctrl.signal}
+        );
+        const deJson = await deRes.json();
+        if (deJson.status === 1 && deJson.product?.product_name) json = deJson;
+      } catch(e2) {}
+      // Fallback: world.openfoodfacts.org
+      if (!json) {
+        try {
+          const ctrl2 = new AbortController(); setTimeout(()=>ctrl2.abort(),10000);
+          const wRes = await fetch(
+            `https://world.openfoodfacts.org/api/v2/product/${hit.code}.json?fields=product_name,brands,nutriments,product_quantity_unit`,
+            {signal: ctrl2.signal}
+          );
+          const wJson = await wRes.json();
+          if (wJson.status === 1 && wJson.product?.product_name) json = wJson;
+        } catch(e3) {}
+      }
       setScanE('');
-      if (json.status===1 && json.product?.product_name) {
-        const p=json.product;
-        pickProduct({name:p.product_name.trim(),brand:(p.brands||'').split(',')[0].trim(),
+      if (json) {
+        const p = json.product;
+        pickProduct({name:p.product_name.trim(), brand:(p.brands||'').split(',')[0].trim(),
           isLiq:(p.product_quantity_unit||'').toLowerCase().includes('ml'),
           kcal:0, nutriments:p.nutriments||{}, pqu:p.product_quantity_unit||''});
-      } else { setScanE('Produkt nicht gefunden — manuell eingeben'); }
+      } else {
+        setScanE(`❌ EAN ${hit.code} nicht gefunden. Nährwerte manuell eingeben oder Barcode-Nummer unten eintippen.`);
+        setScanManual(hit.code);
+      }
     } catch(err) { setScanE('Fehler: '+(err?.message||'Unbekannt')); }
   };
 
@@ -1966,8 +1993,47 @@ function ErnaehrungForm({ add, initialData, onSave, onClose, entries }) {
               borderRadius:8,padding:'0 14px',color:C.water,fontSize:20,
               flexShrink:0,cursor:'pointer'}}>📷</button>
         </div>
-        {scanErr&&<div style={{fontSize:11,color:C.danger,marginBottom:8,padding:'6px 10px',
-          background:`${C.danger}14`,borderRadius:6}}>{scanErr}</div>}
+        {scanErr&&<div style={{fontSize:11,color:scanErr.startsWith('⏳')?C.muted:C.danger,
+          marginBottom:8,padding:'8px 10px',
+          background:scanErr.startsWith('⏳')?`${C.muted}14`:`${C.danger}14`,
+          borderRadius:6,whiteSpace:'pre-line'}}>{scanErr}</div>}
+        {/* EAN-Schnelleingabe: erscheint automatisch nach fehlgeschlagenem Scan */}
+        {(scanManual || scanErr.includes('eintippen')) && !selProd && (
+          <div style={{marginBottom:10}}>
+            <label style={ST.lbl}>Barcode-Nummer (EAN) eingeben</label>
+            <div style={{display:'flex',gap:8}}>
+              <input style={{...ST.inp,marginBottom:0,flex:1,fontFamily:'monospace'}}
+                type="number" inputMode="numeric" placeholder="z.B. 4388860678727"
+                value={scanManual} onChange={e=>setScanManual(e.target.value)}
+                onKeyDown={async e=>{
+                  if(e.key==='Enter'&&scanManual.trim()){
+                    setScanE('⏳ Produkt wird gesucht…');
+                    const code=scanManual.trim();
+                    let json=null;
+                    try{const r=await fetch(`https://de.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,nutriments,product_quantity_unit`);const j=await r.json();if(j.status===1&&j.product?.product_name)json=j;}catch(e2){}
+                    if(!json){try{const r=await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,nutriments,product_quantity_unit`);const j=await r.json();if(j.status===1&&j.product?.product_name)json=j;}catch(e3){}}
+                    setScanE('');
+                    if(json){const p=json.product;pickProduct({name:p.product_name.trim(),brand:(p.brands||'').split(',')[0].trim(),isLiq:(p.product_quantity_unit||'').toLowerCase().includes('ml'),kcal:0,nutriments:p.nutriments||{},pqu:p.product_quantity_unit||''});setScanManual('');}
+                    else setScanE(`❌ EAN ${code} nicht gefunden — bitte manuell eingeben.`);
+                  }
+                }}/>
+              <button onClick={async ()=>{
+                if(!scanManual.trim())return;
+                setScanE('⏳ Produkt wird gesucht…');
+                const code=scanManual.trim();
+                let json=null;
+                try{const r=await fetch(`https://de.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,nutriments,product_quantity_unit`);const j=await r.json();if(j.status===1&&j.product?.product_name)json=j;}catch(e2){}
+                if(!json){try{const r=await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,nutriments,product_quantity_unit`);const j=await r.json();if(j.status===1&&j.product?.product_name)json=j;}catch(e3){}}
+                setScanE('');
+                if(json){const p=json.product;pickProduct({name:p.product_name.trim(),brand:(p.brands||'').split(',')[0].trim(),isLiq:(p.product_quantity_unit||'').toLowerCase().includes('ml'),kcal:0,nutriments:p.nutriments||{},pqu:p.product_quantity_unit||''});setScanManual('');}
+                else setScanE(`❌ EAN ${code} nicht gefunden — bitte manuell eingeben.`);
+              }} style={{background:C.water,color:C.bg,border:'none',borderRadius:8,
+                padding:'0 14px',fontSize:13,fontWeight:600,cursor:'pointer',flexShrink:0}}>
+                Suchen
+              </button>
+            </div>
+          </div>
+        )}
         {loading&&<div style={{fontSize:11,color:C.muted,marginBottom:6,display:'flex',alignItems:'center',gap:6}}>
           <span style={{display:'inline-block',width:10,height:10,borderRadius:'50%',
             border:`2px solid ${C.water}`,borderTopColor:'transparent',
@@ -2003,7 +2069,7 @@ function ErnaehrungForm({ add, initialData, onSave, onClose, entries }) {
                 whiteSpace:'nowrap'}}>{selProd.name}</div>
               {selProd.brand&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{selProd.brand}</div>}
             </div>
-            <button onClick={()=>{setSel(null);setScanE('');}}
+            <button onClick={()=>{setSel(null);setScanE('');setScanManual('');}}
               style={{background:'none',border:'none',color:C.muted,fontSize:20,padding:0,
                 cursor:'pointer',flexShrink:0}}>✕</button>
           </div>
@@ -2511,57 +2577,54 @@ function ZyklusForm({ add, entries, initialData, onSave, onClose }) {
   </>;
 }
 
-// ── Barcode-Erkennung: BarcodeDetector → ZXing BrowserMultiFormatReader ────
+// ── Barcode-Erkennung: BarcodeDetector → Quagga2 ────────────────────────────
+// Hilfsfunktion: Bild-Element auf Canvas zeichnen und ImageData zurückgeben
+function _imgToCanvas(imageEl) {
+  const c = document.createElement('canvas');
+  c.width  = imageEl.naturalWidth  || imageEl.videoWidth  || imageEl.width  || 640;
+  c.height = imageEl.naturalHeight || imageEl.videoHeight || imageEl.height || 480;
+  c.getContext('2d').drawImage(imageEl, 0, 0, c.width, c.height);
+  return c;
+}
+
 async function detectFromImage(imageEl) {
-  // Methode 1: native BarcodeDetector (iOS 17+, Android Chrome, Samsung)
+  // Methode 1: native BarcodeDetector (Chrome Android, Safari 17.4+)
   if ('BarcodeDetector' in window) {
     try {
       const fmts = await BarcodeDetector.getSupportedFormats().catch(()=>
-        ['ean_13','ean_8','upc_a','upc_e','code_128','code_39']);
-      const det = new BarcodeDetector({ formats: fmts.length ? fmts : ['ean_13','ean_8','upc_a','upc_e','code_128','code_39'] });
+        ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','code_93']);
+      const det = new BarcodeDetector({
+        formats: fmts.length ? fmts : ['ean_13','ean_8','upc_a','upc_e','code_128','code_39'],
+      });
       const codes = await det.detect(imageEl);
       if (codes.length) return { code: codes[0].rawValue, method: 'BarcodeDetector' };
     } catch(e) {}
   }
 
-  // Methode 2: ZXing BrowserMultiFormatReader (korrekte moderne API)
-  const ZXL = window.ZXingLibrary || window.ZXing;
-  if (ZXL) {
-    // 2a: BrowserMultiFormatReader (empfohlen)
-    if (ZXL.BrowserMultiFormatReader) {
-      try {
-        const reader = new ZXL.BrowserMultiFormatReader();
-        let result;
-        if (imageEl instanceof HTMLVideoElement) {
-          const c = document.createElement('canvas');
-          c.width = imageEl.videoWidth || 640; c.height = imageEl.videoHeight || 480;
-          c.getContext('2d').drawImage(imageEl, 0, 0);
-          result = reader.decodeFromCanvas ? reader.decodeFromCanvas(c) : null;
-        } else if (imageEl instanceof HTMLImageElement) {
-          result = await reader.decodeFromImageElement(imageEl).catch(()=>null);
-        } else if (imageEl instanceof HTMLCanvasElement) {
-          result = reader.decodeFromCanvas ? reader.decodeFromCanvas(imageEl) : null;
-        }
-        if (result) return { code: result.getText(), method: 'ZXing' };
-      } catch(e) {}
-    }
-    // 2b: Niedrig-Level Canvas-API (Fallback für ältere ZXing-Bundles)
-    if (ZXL.MultiFormatReader && ZXL.RGBLuminanceSource) {
-      try {
-        const c = document.createElement('canvas');
-        c.width  = imageEl.naturalWidth  || imageEl.videoWidth  || imageEl.width  || 640;
-        c.height = imageEl.naturalHeight || imageEl.videoHeight || imageEl.height || 480;
-        c.getContext('2d').drawImage(imageEl, 0, 0);
-        const id = c.getContext('2d').getImageData(0,0,c.width,c.height);
-        const hints = new Map();
-        hints.set(ZXL.DecodeHintType?.TRY_HARDER ?? 3, true);
-        const reader = new ZXL.MultiFormatReader(); reader.setHints(hints);
-        const lum = new ZXL.RGBLuminanceSource(id.data, c.width, c.height);
-        const bmp = new ZXL.BinaryBitmap(new ZXL.HybridBinarizer(lum));
-        const res = reader.decode(bmp).getText();
-        if (res) return { code: res, method: 'ZXing-legacy' };
-      } catch(e) {}
-    }
+  // Methode 2: Quagga (läuft auf allen Browsern inkl. iOS Safari)
+  if (typeof Quagga !== 'undefined') {
+    try {
+      const canvas = (imageEl instanceof HTMLCanvasElement)
+        ? imageEl
+        : _imgToCanvas(imageEl);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      const result = await new Promise((resolve) => {
+        Quagga.decodeSingle({
+          src: dataUrl,
+          numOfWorkers: 0,
+          inputStream: { size: 800 },
+          decoder: {
+            readers: ['ean_reader','ean_8_reader','upc_reader','upc_e_reader','code_128_reader','code_39_reader'],
+            multiple: false,
+          },
+          locate: true,
+          locator: { patchSize: 'medium', halfSample: true },
+        }, (res) => resolve(res));
+      });
+      if (result?.codeResult?.code) {
+        return { code: result.codeResult.code, method: 'Quagga' };
+      }
+    } catch(e) {}
   }
 
   return null;
@@ -2906,17 +2969,32 @@ function ProductLookup({ mode, onSave, onClose }) {
     } catch(e) { setErr('Fehler: '+e.message); setView('scan'); }
   };
 
-  // ── OpenFoodFacts Barcode — direkt API, kein lokaler Fallback ────────────
+  // ── OpenFoodFacts Barcode — DE zuerst, world als Fallback ────────────────
   const fetchProd = async code => {
     setBC(code); setView('loading');
     try {
-      const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),12000);
-      const res = await fetch(
-        `https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,nutriments,product_quantity_unit`,
-        { signal:ctrl.signal }
-      );
-      const json = await res.json();
-      if (json.status===1 && json.product?.product_name) {
+      let json = null;
+      // Zuerst DE-Datenbank (Supermarktprodukte Deutschland)
+      try {
+        const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),10000);
+        const res = await fetch(
+          `https://de.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,nutriments,product_quantity_unit`,
+          { signal:ctrl.signal }
+        );
+        const j = await res.json();
+        if (j.status===1 && j.product?.product_name) json = j;
+      } catch(e1) {}
+      // Fallback: world.openfoodfacts.org
+      if (!json) {
+        const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),10000);
+        const res = await fetch(
+          `https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,nutriments,product_quantity_unit`,
+          { signal:ctrl.signal }
+        );
+        const j = await res.json();
+        if (j.status===1 && j.product?.product_name) json = j;
+      }
+      if (json) {
         setProd(buildProd(json.product)); setView('product');
       } else {
         setPre(''); setView('notfound');
@@ -3010,7 +3088,6 @@ function ProductLookup({ mode, onSave, onClose }) {
           <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
             {[
               ['BarcodeDetector', 'BarcodeDetector' in window],
-              ['ZXing', !!(window.ZXingLibrary||window.ZXing)],
               ['Quagga', typeof Quagga!=='undefined'],
             ].map(([l,ok])=>(
               <span key={l} style={{fontSize:10,padding:'2px 8px',borderRadius:10,
@@ -4662,7 +4739,7 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
         { label:'Einträge gesamt',  value: String(totalEntries) },
         { label:'Tage getrackt',    value: String(trackingDays) },
         { label:'Metriken aktiv',   value: String(Object.keys(METRICS).filter(k=>entries.some(e=>e.type===k)).length) },
-        { label:'Version',          value: 'v6.0' },
+        { label:'Version',          value: 'v6.1' },
         { label:'Speicher',         value: 'localStorage · lokal' },
       ],
       readOnly: true,
@@ -6320,7 +6397,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v6.0</span>
+          <span>v6.1</span>
         </div>
       </header>
 
