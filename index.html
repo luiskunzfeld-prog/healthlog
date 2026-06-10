@@ -4739,7 +4739,7 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
         { label:'Einträge gesamt',  value: String(totalEntries) },
         { label:'Tage getrackt',    value: String(trackingDays) },
         { label:'Metriken aktiv',   value: String(Object.keys(METRICS).filter(k=>entries.some(e=>e.type===k)).length) },
-        { label:'Version',          value: 'v6.1' },
+        { label:'Version',          value: 'v6.2' },
         { label:'Speicher',         value: 'localStorage · lokal' },
       ],
       readOnly: true,
@@ -5174,6 +5174,7 @@ function App() {
   const [editing,setEditing]   = useState(null);
   const [journalAdd,setJournalAdd] = useState(null);
   const [showProfile,setShowProfile] = useState(false);
+  const [undoEntry,  setUndoEntry]   = useState(null); // { entry, timer }
 
   // ── Tipp-System: Dismiss-State ────────────────────────────────────────────
   const { dismissed, dismiss } = useDismiss();
@@ -5200,6 +5201,27 @@ function App() {
   },[]);
 
   const del = useCallback(id=>setEntries(prev=>prev.filter(e=>e.id!==id)),[]);
+
+  // Soft-Delete: zeigt Undo-Toast für 4 Sekunden, dann erst wirklich löschen
+  const softDel = useCallback((entry) => {
+    // Sofort aus Liste entfernen (optimistic)
+    setEntries(prev=>prev.filter(e=>e.id!==entry.id));
+    // Laufenden Timer abbrechen falls noch einer läuft
+    setUndoEntry(prev=>{ if(prev?.timer) clearTimeout(prev.timer); return null; });
+    // Neuen 4s-Timer starten
+    const timer = setTimeout(()=>setUndoEntry(null), 4000);
+    setUndoEntry({ entry, timer });
+  },[]);
+
+  const undoDelete = useCallback(()=>{
+    setUndoEntry(prev=>{
+      if(!prev) return null;
+      clearTimeout(prev.timer);
+      // Eintrag wieder einfügen, sortiert nach ts
+      setEntries(es=>[...es, prev.entry].sort((a,b)=>(b.ts||0)-(a.ts||0)));
+      return null;
+    });
+  },[]);
 
   const updateEntry = useCallback((id,newData)=>{
     setEntries(prev=>prev.map(e=>e.id===id?{...e,data:newData}:e));
@@ -5497,7 +5519,7 @@ function App() {
               </div>
               <div style={{display:'flex',gap:2,flexShrink:0}}>
                 <button onClick={()=>setEditing(e)} style={{background:'none',border:'none',color:C.muted,fontSize:13,padding:'4px 6px'}}>✎</button>
-                <button onClick={()=>del(e.id)} style={{background:'none',border:'none',color:C.faint,fontSize:16,padding:'4px 6px'}}>×</button>
+                <button onClick={()=>softDel(e)} style={{background:'none',border:'none',color:C.faint,fontSize:16,padding:'4px 6px'}}>×</button>
               </div>
             </div>
           ))}
@@ -5873,7 +5895,7 @@ function App() {
       <div style={{display:'flex',gap:5,marginTop:8}}>
         <button onClick={()=>setEditing(e)} style={{fontSize:10,color:C.muted,background:'none',
           border:`1px solid ${C.border}`,borderRadius:5,padding:'3px 8px',cursor:'pointer'}}>Bearbeiten</button>
-        <button onClick={()=>{if(confirm('Löschen?'))del(e.id);}} style={{fontSize:10,color:C.danger,background:'none',
+        <button onClick={()=>softDel(e)} style={{fontSize:10,color:C.danger,background:'none',
           border:`1px solid ${C.danger}30`,borderRadius:5,padding:'3px 8px',cursor:'pointer'}}>Löschen</button>
       </div>
     );
@@ -6397,7 +6419,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v6.1</span>
+          <span>v6.2</span>
         </div>
       </header>
 
@@ -6478,6 +6500,29 @@ function App() {
           top={top}
           entries={entries}
         />
+      )}
+
+      {/* ── Undo-Toast (Eintrag gelöscht) ── */}
+      {undoEntry && (
+        <div style={{
+          position:'fixed', bottom:`calc(${bot} + 56px)`, left:'50%', transform:'translateX(-50%)',
+          zIndex:500, display:'flex', alignItems:'center', gap:12,
+          background:C.cardAlt, border:`1px solid ${C.border}`,
+          borderRadius:10, padding:'10px 16px',
+          boxShadow:'0 4px 20px rgba(0,0,0,0.5)',
+          maxWidth:'calc(min(440px, 100vw) - 32px)', width:'max-content',
+        }}>
+          <span style={{fontSize:13,color:C.text,flex:1}}>
+            <span style={{color:METRICS[undoEntry.entry.type]?.color}}>{METRICS[undoEntry.entry.type]?.label}</span>
+            {' '}gelöscht
+          </span>
+          <button onClick={undoDelete}
+            style={{fontSize:13,fontWeight:600,color:C.accent,background:'none',
+              border:`1px solid ${C.accent}50`,borderRadius:7,padding:'5px 14px',
+              cursor:'pointer',flexShrink:0,fontFamily:'inherit'}}>
+            Rückgängig
+          </button>
+        </div>
       )}
 
       <nav style={{flexShrink:0,background:C.bg,borderTop:`1px solid ${C.border}`,display:'flex',
