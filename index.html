@@ -1950,9 +1950,13 @@ function ErnaehrungForm({ add, initialData, onSave, onClose, entries }) {
 
   const saveRezepte = (list) => { setRezepte(list); store.set('hl_rezepte', list); };
 
+  const [rezLocalRes, setRezLocalRes] = React.useState([]);
+
   const rezDoSearch = async q => {
     if (rezAbortRef.current) { try { rezAbortRef.current.abort(); } catch(e){} rezAbortRef.current = null; }
     setRezResults([]);
+    // Lokale DB sofort
+    try { setRezLocalRes(searchLocalFoods(q, 6)); } catch(e) { setRezLocalRes([]); }
     if (!q || q.trim().length < 2) { setRezLoading(false); return; }
     setRezLoading(true);
     try {
@@ -1973,6 +1977,25 @@ function ErnaehrungForm({ add, initialData, onSave, onClose, entries }) {
       if (!ctrl.signal.aborted) setRezResults(remote.slice(0,15));
     } catch(err) {}
     finally { setRezLoading(false); }
+  };
+
+  // Lokales Produkt als Rezept-Zutat hinzufügen
+  const rezAddLocalZutat = (item) => {
+    const portions = getPortionsForProduct({name: item.n, cat: item.cat, liq: item.liq});
+    const defaultQty = portions.length > 0 ? portions[0].g : item.liq ? 200 : 100;
+    const q = defaultQty;
+    const p = item.per100;
+    const f = (v,d=1) => +((v||0)*q/100).toFixed(d);
+    const zutat = {
+      name: item.n, brand: 'Schätzwert', qty: q, unit: item.liq ? 'ml' : 'g',
+      kcal:   Math.round((p.kcal||0)*q/100),
+      protein: f(p.protein), carbs: f(p.carbs), sugar: f(p.sugar||0),
+      fat:     f(p.fat),     satFat: f(p.satFat||0), fiber: f(p.fiber||0), salt: f(p.salt||0, 2),
+      per100: { kcal:p.kcal, protein:p.protein, carbs:p.carbs, sugar:p.sugar||0,
+                fat:p.fat, satFat:p.satFat||0, fiber:p.fiber||0, salt:p.salt||0 }
+    };
+    setRezZutaten(prev => [...prev, zutat]);
+    setRezSuchQ(''); setRezResults([]); setRezLocalRes([]);
   };
 
   const rezAddZutat = (r, qty=100) => {
@@ -2863,22 +2886,61 @@ function ErnaehrungForm({ add, initialData, onSave, onClose, entries }) {
             animation:'spin 0.7s linear infinite'}}/>
           Suche…
         </div>}
-        {rezResults.length>0&&(
-          <div style={{maxHeight:200,overflowY:'auto',WebkitOverflowScrolling:'touch',marginBottom:12}}>
-            {rezResults.map(r=>(
-              <button key={(r.code||'')+r.name} onClick={()=>rezAddZutat(r,100)}
-                style={{width:'100%',background:C.cardAlt,border:`1px solid ${C.border}`,
-                  borderRadius:8,padding:'9px 12px',textAlign:'left',marginBottom:4,display:'block',cursor:'pointer'}}>
-                <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',
-                  textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
-                <div style={{display:'flex',justifyContent:'space-between',marginTop:2}}>
-                  <span style={{fontSize:11,color:C.muted}}>{r.brand||'—'}</span>
-                  {r.kcal>0&&<span style={{fontSize:11,color:C.accent,fontWeight:500}}>{r.kcal} kcal/100g</span>}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
+        <div style={{maxHeight:240,overflowY:'auto',WebkitOverflowScrolling:'touch',marginBottom:12}}>
+          {/* Lokale Treffer */}
+          {rezLocalRes.length>0&&<>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',
+              marginBottom:6,display:'flex',alignItems:'center',gap:6}}>
+              <span style={{width:6,height:6,borderRadius:'50%',background:C.success,display:'inline-block',flexShrink:0}}/>
+              Generische Einträge
+            </div>
+            {rezLocalRes.map(item=>{
+              const portions = getPortionsForProduct({name:item.n, cat:item.cat, liq:item.liq});
+              const defP = portions[0];
+              return (
+                <button key={'rloc_'+item.n} onClick={()=>rezAddLocalZutat(item)}
+                  style={{width:'100%',background:`${C.success}08`,border:`1px solid ${C.success}25`,
+                    borderRadius:8,padding:'9px 12px',textAlign:'left',marginBottom:4,display:'block',cursor:'pointer'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                    <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',
+                      textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,paddingRight:8}}>{item.n}</div>
+                    <span style={{fontSize:10,color:C.success,flexShrink:0,fontWeight:500,
+                      background:`${C.success}15`,borderRadius:4,padding:'1px 5px'}}>lokal</span>
+                  </div>
+                  <div style={{display:'flex',gap:8,marginTop:3,flexWrap:'wrap',alignItems:'center'}}>
+                    {defP&&<span style={{fontSize:10,color:C.muted,background:`${C.border}60`,
+                      borderRadius:4,padding:'1px 5px'}}>{defP.label}</span>}
+                    <span style={{fontSize:10,color:C.accent,fontWeight:500}}>{item.per100.kcal} kcal/100{item.liq?'ml':'g'}</span>
+                    <span style={{fontSize:10,color:C.sport}}>{item.per100.protein}g P</span>
+                    <span style={{fontSize:10,color:C.water}}>{item.per100.carbs}g KH</span>
+                    <span style={{fontSize:10,color:C.mood}}>{item.per100.fat}g F</span>
+                  </div>
+                </button>
+              );
+            })}
+            {rezResults.length>0&&<div style={{fontSize:10,color:C.faint,letterSpacing:0.8,
+              textTransform:'uppercase',marginBottom:6,marginTop:8,display:'flex',alignItems:'center',gap:6}}>
+              <span style={{width:6,height:6,borderRadius:'50%',background:C.water,display:'inline-block',flexShrink:0}}/>
+              Markenprodukte
+            </div>}
+          </>}
+          {/* OpenFoodFacts */}
+          {rezResults.map(r=>(
+            <button key={(r.code||'')+r.name} onClick={()=>rezAddZutat(r,100)}
+              style={{width:'100%',background:C.cardAlt,border:`1px solid ${C.border}`,
+                borderRadius:8,padding:'9px 12px',textAlign:'left',marginBottom:4,display:'block',cursor:'pointer'}}>
+              <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',
+                textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:2}}>
+                <span style={{fontSize:11,color:C.muted}}>{r.brand||'—'}</span>
+                {r.kcal>0&&<span style={{fontSize:11,color:C.accent,fontWeight:500}}>{r.kcal} kcal/100g</span>}
+              </div>
+            </button>
+          ))}
+          {rezSuchQ.length>0&&rezResults.length===0&&rezLocalRes.length===0&&!rezLoading&&(
+            <div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'10px 0'}}>Keine Treffer</div>
+          )}
+        </div>
 
         <div style={{display:'flex',gap:8,marginTop:4}}>
           <button onClick={()=>rezSpeichern(false)}
@@ -5451,7 +5513,7 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
         { label:'Einträge gesamt',  value: String(totalEntries) },
         { label:'Tage getrackt',    value: String(trackingDays) },
         { label:'Metriken aktiv',   value: String(Object.keys(METRICS).filter(k=>entries.some(e=>e.type===k)).length) },
-        { label:'Version',          value: 'v6.8' },
+        { label:'Version',          value: 'v6.9' },
         { label:'Speicher',         value: 'localStorage · lokal' },
       ],
       readOnly: true,
@@ -7132,7 +7194,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v6.8</span>
+          <span>v6.9</span>
         </div>
       </header>
 
