@@ -137,182 +137,6 @@ const store = {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
-// KEIN LOKALE DATENBANK — alle Produktdaten kommen live von OpenFoodFacts
-// ══════════════════════════════════════════════════════════════════════════════
-const LMDB_PLACEHOLDER = [
-  // ── Milch & Milchprodukte ─────────────────────────────────────────────────
-  {n:'Vollmilch 3,5%',      b:'',        k:64,  p:3.3,  c:4.8,  f:3.5,  fi:0,   s:4.8,  liq:true,  cat:'Milch & Käse'},
-  {n:'Halbfettmilch 1,5%',  b:'',        k:46,  p:3.3,  c:4.7,  f:1.5,  fi:0,   s:4.7,  liq:true,  cat:'Milch & Käse'},
-  {n:'Fettarme Milch 0,1%', b:'',        k:35,  p:3.4,  c:4.8,  f:0.1,  fi:0,   s:4.8,  liq:true,  cat:'Milch & Käse'},
-  {n:'Magerquark',          b:'',        k:67,  p:12.0, c:4.1,  f:0.2,  fi:0,   s:4.1,  liq:false, cat:'Milch & Käse'},
-  {n:'Quark 20% Fett i.Tr.',b:'',        k:107, p:11.5, c:3.8,  f:5.1,  fi:0,   s:3.8,  liq:false, cat:'Milch & Käse'},
-  {n:'Joghurt natur 3,5%',  b:'',        k:65,  p:3.9,  c:4.9,  f:3.5,  fi:0,   s:4.9,  liq:false, cat:'Milch & Käse'},
-  {n:'Joghurt natur 0,1%',  b:'',        k:36,  p:4.1,  c:5.1,  f:0.1,  fi:0,   s:5.1,  liq:false, cat:'Milch & Käse'},
-  {n:'Skyr natur',          b:'Arla',    k:63,  p:11.0, c:4.2,  f:0.2,  fi:0,   s:4.2,  liq:false, cat:'Milch & Käse'},
-  {n:'Frischkäse Doppelrahm',b:'',       k:285, p:6.0,  c:3.5,  f:27.0, fi:0,   s:3.5,  liq:false, cat:'Milch & Käse'},
-  {n:'Saure Sahne 10%',     b:'',        k:118, p:3.0,  c:3.8,  f:10.0, fi:0,   s:3.8,  liq:false, cat:'Milch & Käse'},
-  {n:'Schlagsahne 30%',     b:'',        k:296, p:2.4,  c:3.3,  f:30.0, fi:0,   s:3.3,  liq:true,  cat:'Milch & Käse'},
-  {n:'Gouda jung',          b:'',        k:356, p:25.0, c:0.1,  f:28.0, fi:0,   s:0.1,  liq:false, cat:'Milch & Käse'},
-  {n:'Emmentaler 45%',      b:'',        k:395, p:29.0, c:0,    f:31.0, fi:0,   s:0,    liq:false, cat:'Milch & Käse'},
-  {n:'Mozzarella',          b:'',        k:253, p:18.0, c:0.7,  f:20.0, fi:0,   s:0.7,  liq:false, cat:'Milch & Käse'},
-  {n:'Parmesan',            b:'',        k:431, p:38.0, c:0,    f:29.0, fi:0,   s:0,    liq:false, cat:'Milch & Käse'},
-  {n:'Feta',                b:'',        k:264, p:14.0, c:0.5,  f:22.0, fi:0,   s:0.5,  liq:false, cat:'Milch & Käse'},
-  {n:'Butter',              b:'',        k:741, p:0.7,  c:0.7,  f:83.0, fi:0,   s:0.7,  liq:false, cat:'Fette & Öle'},
-  // ── Eier ─────────────────────────────────────────────────────────────────
-  {n:'Ei (M, 60g)',         b:'',        k:143, p:12.5, c:0.7,  f:9.9,  fi:0,   s:0.4,  liq:false, cat:'Eier'},
-  {n:'Eiklar / Eiweiß',     b:'',        k:52,  p:11.0, c:0.7,  f:0.2,  fi:0,   s:0.7,  liq:false, cat:'Eier'},
-  // ── Fleisch ───────────────────────────────────────────────────────────────
-  {n:'Hähnchenbrust roh',   b:'',        k:107, p:23.0, c:0,    f:1.9,  fi:0,   s:0,    liq:false, cat:'Fleisch & Fisch'},
-  {n:'Hähnchenbrust gegart',b:'',        k:130, p:28.0, c:0,    f:2.5,  fi:0,   s:0,    liq:false, cat:'Fleisch & Fisch'},
-  {n:'Putenbrust',          b:'',        k:99,  p:23.0, c:0,    f:0.7,  fi:0,   s:0,    liq:false, cat:'Fleisch & Fisch'},
-  {n:'Rindfleisch mager',   b:'',        k:136, p:22.0, c:0,    f:5.3,  fi:0,   s:0,    liq:false, cat:'Fleisch & Fisch'},
-  {n:'Hackfleisch gemischt',b:'',        k:247, p:17.0, c:0,    f:20.0, fi:0,   s:0,    liq:false, cat:'Fleisch & Fisch'},
-  {n:'Schweineschnitzel',   b:'',        k:123, p:20.0, c:0,    f:4.2,  fi:0,   s:0,    liq:false, cat:'Fleisch & Fisch'},
-  {n:'Wiener Würstchen',    b:'',        k:272, p:13.0, c:1.8,  f:24.0, fi:0,   s:1.8,  liq:false, cat:'Wurst & Aufschnitt'},
-  {n:'Kochschinken',        b:'',        k:109, p:18.0, c:1.0,  f:3.7,  fi:0,   s:1.0,  liq:false, cat:'Wurst & Aufschnitt'},
-  {n:'Salami',              b:'',        k:424, p:22.0, c:1.0,  f:37.0, fi:0,   s:1.0,  liq:false, cat:'Wurst & Aufschnitt'},
-  {n:'Leberwurst',          b:'',        k:290, p:13.0, c:2.5,  f:26.0, fi:0,   s:2.0,  liq:false, cat:'Wurst & Aufschnitt'},
-  // ── Fisch ────────────────────────────────────────────────────────────────
-  {n:'Lachs roh',           b:'',        k:179, p:20.0, c:0,    f:11.0, fi:0,   s:0,    liq:false, cat:'Fleisch & Fisch'},
-  {n:'Thunfisch in Wasser', b:'',        k:109, p:25.0, c:0,    f:0.8,  fi:0,   s:0,    liq:false, cat:'Fleisch & Fisch'},
-  {n:'Garnelen',            b:'',        k:89,  p:17.0, c:0.5,  f:1.8,  fi:0,   s:0.5,  liq:false, cat:'Fleisch & Fisch'},
-  // ── Brot & Getreide ───────────────────────────────────────────────────────
-  {n:'Vollkornbrot',        b:'',        k:215, p:7.0,  c:36.0, f:1.8,  fi:7.0, s:2.5,  liq:false, cat:'Brot & Getreide'},
-  {n:'Roggenbrot',          b:'',        k:209, p:6.5,  c:39.0, f:1.2,  fi:5.5, s:1.8,  liq:false, cat:'Brot & Getreide'},
-  {n:'Weißbrot / Toastbrot',b:'',        k:266, p:7.7,  c:52.0, f:2.5,  fi:2.5, s:3.5,  liq:false, cat:'Brot & Getreide'},
-  {n:'Brötchen / Semmel',   b:'',        k:272, p:9.5,  c:53.0, f:1.8,  fi:2.5, s:2.0,  liq:false, cat:'Brot & Getreide'},
-  {n:'Laugenbrezel',        b:'',        k:280, p:8.5,  c:56.0, f:1.5,  fi:2.0, s:2.0,  liq:false, cat:'Brot & Getreide'},
-  {n:'Haferflocken',        b:'',        k:372, p:13.0, c:59.0, f:7.0,  fi:10.0,s:1.0,  liq:false, cat:'Brot & Getreide'},
-  {n:'Müsli (ungesüßt)',    b:'',        k:350, p:9.5,  c:59.0, f:6.5,  fi:8.0, s:8.0,  liq:false, cat:'Brot & Getreide'},
-  {n:'Granola',             b:'',        k:420, p:7.0,  c:65.0, f:14.0, fi:5.0, s:20.0, liq:false, cat:'Brot & Getreide'},
-  {n:'Cornflakes',          b:"Kellogg's",k:376,p:7.5, c:84.0, f:1.5,  fi:2.5, s:8.0,  liq:false, cat:'Brot & Getreide'},
-  {n:'Pasta (roh)',         b:'',        k:357, p:13.0, c:71.0, f:1.8,  fi:2.8, s:3.0,  liq:false, cat:'Brot & Getreide'},
-  {n:'Pasta (gekocht)',     b:'',        k:131, p:4.8,  c:26.0, f:0.9,  fi:1.8, s:0.4,  liq:false, cat:'Brot & Getreide'},
-  {n:'Reis (roh)',          b:'',        k:356, p:7.1,  c:78.0, f:0.7,  fi:1.0, s:0.1,  liq:false, cat:'Brot & Getreide'},
-  {n:'Reis (gekocht)',      b:'',        k:130, p:2.7,  c:28.0, f:0.3,  fi:0.4, s:0.1,  liq:false, cat:'Brot & Getreide'},
-  {n:'Kartoffel (roh)',     b:'',        k:76,  p:2.0,  c:16.0, f:0.1,  fi:1.5, s:0.5,  liq:false, cat:'Gemüse'},
-  {n:'Kartoffel (gekocht)', b:'',        k:70,  p:1.9,  c:15.0, f:0.1,  fi:1.3, s:0.4,  liq:false, cat:'Gemüse'},
-  // ── Obst ─────────────────────────────────────────────────────────────────
-  {n:'Apfel',               b:'',        k:52,  p:0.3,  c:12.0, f:0.2,  fi:2.4, s:10.0, liq:false, cat:'Obst'},
-  {n:'Banane',              b:'',        k:89,  p:1.1,  c:23.0, f:0.3,  fi:2.6, s:12.0, liq:false, cat:'Obst'},
-  {n:'Orange',              b:'',        k:47,  p:0.9,  c:12.0, f:0.1,  fi:2.2, s:9.4,  liq:false, cat:'Obst'},
-  {n:'Erdbeeren',           b:'',        k:32,  p:0.7,  c:7.7,  f:0.3,  fi:2.0, s:4.9,  liq:false, cat:'Obst'},
-  {n:'Blaubeeren / Heidelbeeren',b:'',   k:57,  p:0.7,  c:14.0, f:0.3,  fi:2.4, s:10.0, liq:false, cat:'Obst'},
-  {n:'Trauben',             b:'',        k:69,  p:0.6,  c:18.0, f:0.2,  fi:0.9, s:16.0, liq:false, cat:'Obst'},
-  {n:'Mango',               b:'',        k:65,  p:0.5,  c:17.0, f:0.3,  fi:1.8, s:14.0, liq:false, cat:'Obst'},
-  {n:'Avocado',             b:'',        k:160, p:2.0,  c:9.0,  f:15.0, fi:7.0, s:0.7,  liq:false, cat:'Obst'},
-  {n:'Kiwi',                b:'',        k:61,  p:1.1,  c:15.0, f:0.5,  fi:3.0, s:9.0,  liq:false, cat:'Obst'},
-  {n:'Wassermelone',        b:'',        k:30,  p:0.6,  c:7.6,  f:0.2,  fi:0.4, s:6.2,  liq:false, cat:'Obst'},
-  {n:'Ananas',              b:'',        k:50,  p:0.5,  c:13.0, f:0.1,  fi:1.4, s:10.0, liq:false, cat:'Obst'},
-  // ── Gemüse ────────────────────────────────────────────────────────────────
-  {n:'Karotte / Möhre',     b:'',        k:41,  p:0.9,  c:10.0, f:0.2,  fi:2.8, s:4.7,  liq:false, cat:'Gemüse'},
-  {n:'Tomate',              b:'',        k:18,  p:0.9,  c:3.9,  f:0.2,  fi:1.2, s:2.6,  liq:false, cat:'Gemüse'},
-  {n:'Gurke',               b:'',        k:16,  p:0.7,  c:3.6,  f:0.1,  fi:0.5, s:1.7,  liq:false, cat:'Gemüse'},
-  {n:'Paprika rot',         b:'',        k:31,  p:1.0,  c:6.0,  f:0.3,  fi:2.1, s:4.2,  liq:false, cat:'Gemüse'},
-  {n:'Brokkoli',            b:'',        k:34,  p:2.8,  c:7.0,  f:0.4,  fi:2.6, s:1.7,  liq:false, cat:'Gemüse'},
-  {n:'Spinat',              b:'',        k:23,  p:2.9,  c:3.6,  f:0.4,  fi:2.2, s:0.4,  liq:false, cat:'Gemüse'},
-  {n:'Zucchini',            b:'',        k:17,  p:1.2,  c:3.1,  f:0.3,  fi:1.0, s:2.5,  liq:false, cat:'Gemüse'},
-  {n:'Zwiebel',             b:'',        k:40,  p:1.1,  c:9.3,  f:0.1,  fi:1.7, s:4.2,  liq:false, cat:'Gemüse'},
-  {n:'Champignons',         b:'',        k:22,  p:3.1,  c:3.3,  f:0.3,  fi:1.0, s:2.0,  liq:false, cat:'Gemüse'},
-  {n:'Mais (Dose)',         b:'',        k:86,  p:3.2,  c:19.0, f:1.2,  fi:2.7, s:3.2,  liq:false, cat:'Gemüse'},
-  {n:'Süßkartoffel',        b:'',        k:86,  p:1.6,  c:20.0, f:0.1,  fi:3.0, s:4.2,  liq:false, cat:'Gemüse'},
-  {n:'Feldsalat / Rucola',  b:'',        k:17,  p:1.8,  c:2.4,  f:0.4,  fi:1.5, s:0.5,  liq:false, cat:'Gemüse'},
-  {n:'Eisbergsalat',        b:'',        k:13,  p:0.9,  c:2.0,  f:0.1,  fi:1.2, s:1.5,  liq:false, cat:'Gemüse'},
-  // ── Hülsenfrüchte ─────────────────────────────────────────────────────────
-  {n:'Linsen (gekocht)',     b:'',        k:116, p:9.0,  c:20.0, f:0.4,  fi:8.0, s:1.8,  liq:false, cat:'Hülsenfrüchte'},
-  {n:'Kichererbsen (Dose)', b:'',        k:139, p:7.3,  c:23.0, f:2.0,  fi:4.3, s:1.4,  liq:false, cat:'Hülsenfrüchte'},
-  {n:'Kidneybohnen (Dose)', b:'',        k:127, p:8.7,  c:22.0, f:0.5,  fi:6.2, s:0.3,  liq:false, cat:'Hülsenfrüchte'},
-  // ── Nüsse & Samen ─────────────────────────────────────────────────────────
-  {n:'Mandeln',             b:'',        k:579, p:21.0, c:22.0, f:50.0, fi:12.5,s:4.4,  liq:false, cat:'Nüsse & Samen'},
-  {n:'Walnüsse',            b:'',        k:654, p:15.0, c:14.0, f:65.0, fi:6.7, s:2.6,  liq:false, cat:'Nüsse & Samen'},
-  {n:'Cashewkerne',         b:'',        k:553, p:18.0, c:33.0, f:44.0, fi:3.3, s:5.9,  liq:false, cat:'Nüsse & Samen'},
-  {n:'Erdnüsse',            b:'',        k:567, p:26.0, c:16.0, f:49.0, fi:8.5, s:4.7,  liq:false, cat:'Nüsse & Samen'},
-  {n:'Erdnussbutter',       b:'',        k:590, p:25.0, c:20.0, f:50.0, fi:6.0, s:9.0,  liq:false, cat:'Nüsse & Samen'},
-  // ── Öle & Fette ───────────────────────────────────────────────────────────
-  {n:'Olivenöl',            b:'',        k:884, p:0,    c:0,    f:100,  fi:0,   s:0,    liq:true,  cat:'Fette & Öle'},
-  {n:'Rapsöl',              b:'',        k:884, p:0,    c:0,    f:100,  fi:0,   s:0,    liq:true,  cat:'Fette & Öle'},
-  // ── Getränke ──────────────────────────────────────────────────────────────
-  {n:'Orangensaft',         b:'',        k:45,  p:0.7,  c:10.0, f:0.2,  fi:0.2, s:8.4,  liq:true,  cat:'Getränke'},
-  {n:'Apfelsaft',           b:'',        k:46,  p:0.1,  c:11.0, f:0.1,  fi:0.1, s:11.0, liq:true,  cat:'Getränke'},
-  {n:'Cola',                b:'Coca-Cola',k:42, p:0,    c:11.0, f:0,    fi:0,   s:11.0, liq:true,  cat:'Getränke'},
-  {n:'Cola Zero',           b:'Coca-Cola',k:1,  p:0,    c:0.1,  f:0,    fi:0,   s:0.1,  liq:true,  cat:'Getränke'},
-  {n:'Bier (5%)',           b:'',        k:43,  p:0.5,  c:3.5,  f:0,    fi:0,   s:0,    liq:true,  cat:'Getränke'},
-  {n:'Rotwein',             b:'',        k:85,  p:0.1,  c:2.5,  f:0,    fi:0,   s:0.5,  liq:true,  cat:'Getränke'},
-  {n:'Weißwein',            b:'',        k:82,  p:0.1,  c:2.0,  f:0,    fi:0,   s:0.6,  liq:true,  cat:'Getränke'},
-  {n:'Kaffee schwarz',      b:'',        k:2,   p:0.1,  c:0.3,  f:0,    fi:0,   s:0,    liq:true,  cat:'Getränke'},
-  {n:'Latte Macchiato',     b:'',        k:54,  p:2.0,  c:5.0,  f:3.0,  fi:0,   s:5.0,  liq:true,  cat:'Getränke'},
-  // ── Süßes & Snacks ────────────────────────────────────────────────────────
-  {n:'Schokolade Vollmilch',b:'',        k:535, p:7.0,  c:58.0, f:30.0, fi:2.0, s:55.0, liq:false, cat:'Süßes & Snacks'},
-  {n:'Schokolade Zartbitter',b:'',       k:546, p:5.5,  c:47.0, f:34.0, fi:11.0,s:35.0, liq:false, cat:'Süßes & Snacks'},
-  {n:'Chips',               b:'',        k:522, p:6.5,  c:53.0, f:32.0, fi:4.5, s:3.0,  liq:false, cat:'Süßes & Snacks'},
-  {n:'Gummibärchen',        b:'Haribo',  k:343, p:6.0,  c:77.0, f:0.5,  fi:0,   s:43.0, liq:false, cat:'Süßes & Snacks'},
-  {n:'Butterkeks',          b:'',        k:470, p:8.0,  c:72.0, f:16.0, fi:2.0, s:22.0, liq:false, cat:'Süßes & Snacks'},
-  {n:'Nutella',             b:'Ferrero', k:547, p:6.0,  c:57.0, f:31.0, fi:0,   s:54.0, liq:false, cat:'Süßes & Snacks'},
-  {n:'Müsliriegel',         b:'',        k:390, p:5.0,  c:65.0, f:12.0, fi:3.0, s:30.0, liq:false, cat:'Süßes & Snacks'},
-  // ── Vegetarisch / Vegan ───────────────────────────────────────────────────
-  {n:'Tofu Natur',          b:'',        k:76,  p:8.0,  c:1.9,  f:4.5,  fi:0.3, s:0.5,  liq:false, cat:'Vegetarisch'},
-  {n:'Haferdrink',          b:'Oatly',   k:46,  p:1.0,  c:6.7,  f:1.5,  fi:0.8, s:4.0,  liq:true,  cat:'Vegetarisch'},
-  {n:'Sojamilch',           b:'Alpro',   k:33,  p:3.0,  c:2.5,  f:1.8,  fi:0.5, s:2.5,  liq:true,  cat:'Vegetarisch'},
-  {n:'Mandeldrink',         b:'Alpro',   k:24,  p:0.4,  c:3.2,  f:1.1,  fi:0.4, s:2.7,  liq:true,  cat:'Vegetarisch'},
-
-  // ── Prominente Markenprodukte mit EAN (Supermarkt-Highlights) ─────────────
-  // Aldi / Lidl / Rewe / Edeka Eigenmarken & bekannte Marken
-  {n:'Milka Vollmilch 100g',      b:'Mondelez',  k:534, p:7.3, c:59.0, f:29.0, fi:0,   s:57.0, liq:false, cat:'Süßes & Snacks', ean:'7622210951342'},
-  {n:'KitKat 2 Finger',           b:'Nestlé',    k:506, p:6.4, c:63.0, f:25.0, fi:1.7, s:44.0, liq:false, cat:'Süßes & Snacks', ean:'4008400201306'},
-  {n:'Snickers 50g',              b:'Mars',       k:488, p:8.1, c:59.0, f:24.0, fi:1.1, s:46.0, liq:false, cat:'Süßes & Snacks', ean:'5000159461122'},
-  {n:'Twix 50g',                  b:'Mars',       k:498, p:4.7, c:65.0, f:23.0, fi:0.9, s:42.0, liq:false, cat:'Süßes & Snacks', ean:'5000159412048'},
-  {n:'Haribo Goldbären 200g',     b:'Haribo',    k:343, p:6.0, c:77.0, f:0.5,  fi:0,   s:43.0, liq:false, cat:'Süßes & Snacks', ean:'4001686399057'},
-  {n:'Pringles Original 165g',    b:"Kellogg's", k:527, p:5.6, c:53.0, f:32.0, fi:2.8, s:1.5,  liq:false, cat:'Süßes & Snacks', ean:'5053990101871'},
-  {n:"Lay's Classic 150g",       b:'PepsiCo',   k:536, p:6.5, c:52.0, f:33.0, fi:4.5, s:0.7,  liq:false, cat:'Süßes & Snacks', ean:'5900259128829'},
-  {n:'Coca-Cola 330ml Dose',      b:'Coca-Cola', k:42,  p:0,   c:10.6, f:0,    fi:0,   s:10.6, liq:true,  cat:'Getränke',       ean:'5449000000996'},
-  {n:'Coca-Cola Zero 330ml',      b:'Coca-Cola', k:1,   p:0,   c:0.1,  f:0,    fi:0,   s:0.1,  liq:true,  cat:'Getränke',       ean:'5449000133328'},
-  {n:'Red Bull 250ml',            b:'Red Bull',  k:46,  p:0.4, c:11.0, f:0,    fi:0,   s:11.0, liq:true,  cat:'Getränke',       ean:'90162885'},
-  {n:'Fanta Orange 330ml',        b:'Coca-Cola', k:47,  p:0,   c:11.0, f:0,    fi:0,   s:11.0, liq:true,  cat:'Getränke',       ean:'5000112519731'},
-  {n:'Sprite 330ml',              b:'Coca-Cola', k:40,  p:0,   c:9.7,  f:0,    fi:0,   s:9.7,  liq:true,  cat:'Getränke',       ean:'5449000133380'},
-  {n:'Pepsi 330ml',               b:'PepsiCo',   k:41,  p:0,   c:10.7, f:0,    fi:0,   s:10.7, liq:true,  cat:'Getränke',       ean:'4060800100257'},
-  {n:'Oatly Haferdrink 1L',       b:'Oatly',     k:46,  p:1.0, c:6.7,  f:1.5,  fi:0.8, s:4.0,  liq:true,  cat:'Vegetarisch',    ean:'7394376616124'},
-  {n:'Alpro Soya Drink 1L',       b:'Alpro',     k:33,  p:3.3, c:2.5,  f:1.8,  fi:0.5, s:2.5,  liq:true,  cat:'Vegetarisch',    ean:'5411188119234'},
-  {n:'Arla Skyr Vanille 450g',    b:'Arla',      k:77,  p:10.0,c:7.8,  f:0.2,  fi:0,   s:6.4,  liq:false, cat:'Milch & Käse',   ean:'5707168000038'},
-  {n:'Müller Fruchtzwerg 100g',   b:'Müller',    k:98,  p:2.9, c:14.0, f:3.2,  fi:0,   s:13.0, liq:false, cat:'Milch & Käse',   ean:'4025500056018'},
-  {n:'Chiquita Banane',           b:'Chiquita',  k:89,  p:1.1, c:23.0, f:0.3,  fi:2.6, s:12.0, liq:false, cat:'Obst',           ean:'4011200296908'},
-  {n:"Kellogg's Cornflakes 375g",b:"Kellogg's",k:376, p:7.5, c:84.0, f:1.5,  fi:2.5, s:8.0,  liq:false, cat:'Brot & Getreide',ean:'5053827190085'},
-  {n:'Nestlé Cheerios 300g',      b:'Nestlé',    k:376, p:10.0,c:72.0, f:5.0,  fi:10.0,s:12.0, liq:false, cat:'Brot & Getreide',ean:'7613034898333'},
-  {n:'Dr. Oetker Ristorante Spec.',b:'Dr. Oetker',k:213,p:10.0,c:23.0, f:9.0,  fi:1.5, s:2.0,  liq:false, cat:'Fertigprodukte',  ean:'4001724832034'},
-  {n:'Iglo Fischstäbchen 400g',   b:'Iglo',      k:195, p:12.0,c:17.0, f:8.0,  fi:1.0, s:0.5,  liq:false, cat:'Fleisch & Fisch', ean:'4250241806013'},
-  {n:'Maggi Instantnudeln 64g',   b:'Maggi',     k:447, p:10.0,c:64.0, f:17.0, fi:2.0, s:2.0,  liq:false, cat:'Fertigprodukte',  ean:'4005500071297'},
-  {n:'Nutella 450g',              b:'Ferrero',   k:547, p:6.0, c:57.0, f:31.0, fi:0,   s:54.0, liq:false, cat:'Süßes & Snacks',  ean:'8000500217504'},
-  {n:'Ferrero Rocher 200g',       b:'Ferrero',   k:596, p:7.3, c:44.0, f:41.0, fi:0,   s:30.0, liq:false, cat:'Süßes & Snacks',  ean:'8000500020982'},
-  {n:'Lindt 70% Zartbitter 100g', b:'Lindt',     k:565, p:8.5, c:30.0, f:41.0, fi:11.0,s:19.0, liq:false, cat:'Süßes & Snacks',  ean:'4000539109424'},
-  {n:'Ritter Sport Vollmilch',    b:'Ritter',    k:545, p:7.8, c:55.0, f:32.0, fi:0.5, s:53.0, liq:false, cat:'Süßes & Snacks',  ean:'4000417009003'},
-  {n:'Weihenstephan Vollmilch 1L',b:'Weihensteph.',k:64,p:3.4, c:4.8,  f:3.5,  fi:0,   s:4.8,  liq:true,  cat:'Milch & Käse',   ean:'4002468021111'},
-  {n:'Activia Joghurt Erdbeere',  b:'Danone',    k:81,  p:3.5, c:12.0, f:1.8,  fi:0,   s:11.0, liq:false, cat:'Milch & Käse',   ean:'3033490000401'},
-  {n:'Müller Joghurt Natur 500g', b:'Müller',    k:61,  p:5.0, c:5.0,  f:3.5,  fi:0,   s:5.0,  liq:false, cat:'Milch & Käse',   ean:'4025500004607'},
-  {n:'Kraft Gouda Scheiben 150g', b:'Kraft',     k:356, p:25.0,c:0.1,  f:28.0, fi:0,   s:0.1,  liq:false, cat:'Milch & Käse',   ean:'7622210015143'},
-  {n:'Herta Kochschinken 200g',   b:'Herta',     k:109, p:18.0,c:1.0,  f:3.7,  fi:0,   s:1.0,  liq:false, cat:'Wurst & Aufschnitt',ean:'3175680124801'},
-  {n:'Fleischsalat Appel 200g',   b:'Appel',     k:226, p:8.0, c:4.5,  f:19.0, fi:0.4, s:2.5,  liq:false, cat:'Wurst & Aufschnitt',ean:'4017100560509'},
-  {n:'Bonduelle Mais 285g',       b:'Bonduelle', k:86,  p:3.2, c:19.0, f:1.2,  fi:2.7, s:3.2,  liq:false, cat:'Gemüse',          ean:'3083681048059'},
-  {n:'Heinz Tomato Ketchup 342g', b:'Heinz',     k:112, p:1.5, c:26.0, f:0.1,  fi:1.5, s:22.0, liq:false, cat:'Sonstiges',       ean:'0000087037519'},
-  {n:'Thomy Mayonnaise 200ml',    b:'Thomy',     k:680, p:1.5, c:4.0,  f:74.0, fi:0,   s:2.0,  liq:false, cat:'Sonstiges',       ean:'7613035117631'},
-  {n:'Maggi Würze 100ml',         b:'Maggi',     k:70,  p:8.5, c:4.0,  f:1.5,  fi:0,   s:0,    liq:true,  cat:'Sonstiges',       ean:'4005500004677'},
-  {n:'Allos Hafer Porridge',      b:'Allos',     k:372, p:13.0,c:59.0, f:7.0,  fi:10.0,s:1.0,  liq:false, cat:'Brot & Getreide', ean:'4016249032036'},
-  {n:'Bahlsen Leibniz Butter',    b:'Bahlsen',   k:477, p:7.3, c:69.0, f:18.0, fi:1.9, s:21.0, liq:false, cat:'Süßes & Snacks',  ean:'4017100010700'},
-  {n:'Manner Schnitten 75g',      b:'Manner',    k:506, p:7.0, c:65.0, f:24.0, fi:1.5, s:37.0, liq:false, cat:'Süßes & Snacks',  ean:'9000335105090'},
-  {n:'Hohes C Orange 1L',         b:'Eckes-Granini',k:45,p:0.7,c:10.0, f:0.2,  fi:0.2, s:8.4,  liq:true,  cat:'Getränke',        ean:'4088600104101'},
-  {n:'Capri-Sun Multivitamin 0.2L',b:'Capri-Sun',k:50, p:0,   c:12.0, f:0,    fi:0,   s:12.0, liq:true,  cat:'Getränke',        ean:'4000177154200'},
-  {n:'Nestlé Pure Life 0.5L',     b:'Nestlé',    k:0,   p:0,   c:0,    f:0,    fi:0,   s:0,    liq:true,  cat:'Getränke',        ean:'7613033648915'},
-  {n:'Gerolsteiner Sprudel 0.5L', b:'Gerolsteiner',k:0, p:0,   c:0,    f:0,    fi:0,   s:0,    liq:true,  cat:'Getränke',        ean:'4001513007063'},
-  {n:'Volvic Mineralwasser 0.5L', b:'Volvic',    k:0,   p:0,   c:0,    f:0,    fi:0,   s:0,    liq:true,  cat:'Getränke',        ean:'3057640119808'},
-  {n:'Alnatura Haferdrink 1L',    b:'Alnatura',  k:48,  p:1.1, c:7.0,  f:1.7,  fi:0.9, s:3.5,  liq:true,  cat:'Vegetarisch',     ean:'4104420064303'},
-  {n:'Alpro Mandel ungesüßt 1L',  b:'Alpro',     k:24,  p:0.4, c:3.2,  f:1.1,  fi:0.4, s:2.7,  liq:true,  cat:'Vegetarisch',     ean:'5411188035282'},
-  {n:'Vegeta Gewürzmischung',     b:'Podravka',  k:183, p:12.0,c:27.0, f:3.5,  fi:4.0, s:23.0, liq:false, cat:'Sonstiges',       ean:'3850103800193'},
-  {n:'Knorr Fix Spaghetti Bolognese',b:'Knorr',  k:295, p:11.0,c:55.0, f:2.5,  fi:5.0, s:10.0, liq:false, cat:'Fertigprodukte',  ean:'4038700106040'},
-];
-
-// Sicheres Parsen von Nährwerten (string ODER number)
-const pn = v => +(parseFloat(v)||0);
-
-
-// ══════════════════════════════════════════════════════════════════════════════
 // REFERENZ-PORTIONEN-SYSTEM
 //
 // Datenmodell: Pro Produkt können mehrere benannte Portionen hinterlegt sein.
@@ -1807,7 +1631,7 @@ function DatePickerField({ value, onChange }) {
 }
 
 // ── Forms ─────────────────────────────────────────────────────────────────────
-function GewichtForm({ add, settings, initialData, onSave, onClose, dismissed, onDismiss }) {
+function GewichtForm({ add, settings, initialData, onSave, onClose, dismissed, onDismiss, onSaved }) {
   const [w,setW]=useState(initialData?String(initialData.weight):''); const [fat,setFat]=useState(initialData&&initialData.fat!=null?String(initialData.fat):''); const [note,setN]=useState(initialData?initialData.note||'':'');
   const [date,setDate]=useState(toDay());
   const tip = useTip('gewicht');
@@ -1828,11 +1652,11 @@ function GewichtForm({ add, settings, initialData, onSave, onClose, dismissed, o
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
     <div style={{fontSize:11,color:C.muted,marginBottom:14}}>Körpergröße: {settings.height} cm</div>
     {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
-    <button style={ST.btn(C.accent)} onClick={()=>{ if(!w)return; const d={weight:+w,fat:fat?+fat:null,bmi:b,note}; onSave?onSave(d):add('gewicht',d,date); }}>Speichern</button>
+    <button style={ST.btn(C.accent)} onClick={()=>{ if(!w)return; const d={weight:+w,fat:fat?+fat:null,bmi:b,note}; if(onSave){onSave(d);}else{add('gewicht',d,date);onSaved?.('Gewicht',C.accent);} }}>Speichern</button>
   </>;
 }
 
-function SportForm({ add, initialData, onSave, onClose, dismissed, onDismiss }) {
+function SportForm({ add, initialData, onSave, onClose, dismissed, onDismiss, onSaved, lastWeight }) {
   const types=['Laufen','Gym','Radfahren','Schwimmen','Yoga','HIIT','Wandern','Sonstiges'];
   const intL=['Sehr leicht','Leicht','Mittel','Hart','Maximal'];
   const [st,setSt]=useState(initialData?initialData.sportType:'Laufen'); const [dur,setDur]=useState(initialData?String(initialData.duration):'');
@@ -1858,11 +1682,37 @@ function SportForm({ add, initialData, onSave, onClose, dismissed, onDismiss }) 
     <label style={ST.lbl}>Notiz</label>
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
     {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
-    <button style={ST.btn(C.sport)} onClick={()=>{ if(!dur)return; const d={sportType:st,duration:+dur,intensity:int,calories:cal?+cal:null,note}; onSave?onSave(d):add('sport',d,date); }}>Speichern</button>
+    {/* Auto-Schätzung nur anzeigen wenn kein manueller Wert */}
+    {dur && !cal && (()=>{
+      const MET_MAP={'Laufen':9.8,'Gym':5,'Radfahren':7.5,'Schwimmen':8,'Yoga':3,'HIIT':12,'Wandern':5.5,'Sonstiges':5};
+      const met = MET_MAP[st]||5;
+      const intFactor = [0.75,0.88,1,1.15,1.3][int-1]||1;
+      const kg = lastWeight||75;
+      const est = Math.round(met * intFactor * kg * (+dur/60));
+      return <div style={{fontSize:11,color:C.sport,marginBottom:8,padding:'7px 10px',
+        background:`${C.sport}10`,borderRadius:7,border:`1px solid ${C.sport}25`}}>
+        Schätzung: <strong>{est} kcal</strong> verbrannt
+        <span style={{color:C.muted}}> · {Math.round(kg)}kg × {Math.round(met*intFactor*10)/10} MET × {dur}min</span>
+        <button onClick={()=>setCal(String(est))} style={{marginLeft:8,fontSize:10,color:C.sport,
+          background:'none',border:`1px solid ${C.sport}50`,borderRadius:5,padding:'2px 8px',cursor:'pointer'}}>
+          Übernehmen
+        </button>
+      </div>;
+    })()}
+    <button style={ST.btn(C.sport)} onClick={()=>{
+      if(!dur)return;
+      const MET_MAP={'Laufen':9.8,'Gym':5,'Radfahren':7.5,'Schwimmen':8,'Yoga':3,'HIIT':12,'Wandern':5.5,'Sonstiges':5};
+      const met = MET_MAP[st]||5;
+      const intFactor = [0.75,0.88,1,1.15,1.3][int-1]||1;
+      const kg = lastWeight||75;
+      const autoKcal = cal ? +cal : Math.round(met * intFactor * kg * (+dur/60));
+      const d={sportType:st,duration:+dur,intensity:int,calories:autoKcal,note};
+      if(onSave){onSave(d);}else{add('sport',d,date);onSaved?.('Sport',C.sport);}
+    }}>Speichern</button>
   </>;
 }
 
-function StimmungForm({ add, initialData, onSave, onClose, dismissed, onDismiss }) {
+function StimmungForm({ add, initialData, onSave, onClose, dismissed, onDismiss, onSaved }) {
   const [mood,setM]=useState(initialData?initialData.mood:7); const [energy,setE]=useState(initialData?initialData.energy:7);
   const [stress,setS]=useState(initialData?initialData.stress:3); const [note,setN]=useState(initialData?initialData.note||'':'');
   const [date,setDate]=useState(toDay());
@@ -1879,7 +1729,7 @@ function StimmungForm({ add, initialData, onSave, onClose, dismissed, onDismiss 
     <label style={ST.lbl}>Notiz</label>
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
     {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
-    <button style={ST.btn(C.mood)} onClick={()=>{ const d={mood,energy,stress,note}; onSave?onSave(d):add('stimmung',d,date); }}>Speichern</button>
+    <button style={ST.btn(C.mood)} onClick={()=>{ const d={mood,energy,stress,note}; if(onSave){onSave(d);}else{add('stimmung',d,date);onSaved?.('Stimmung',C.mood);} }}>Speichern</button>
   </>;
 }
 
@@ -3026,7 +2876,7 @@ function ErnaehrungForm({ add, initialData, onSave, onClose, entries }) {
 }
 
 
-function SchlafForm({ add, initialData, onSave, onClose, dismissed, onDismiss }) {
+function SchlafForm({ add, initialData, onSave, onClose, dismissed, onDismiss, onSaved }) {
   const [hours,setH]=useState(initialData?initialData.hours:7.5); const [quality,setQ]=useState(initialData?initialData.quality:3); const [note,setN]=useState(initialData?initialData.note||'':'');
   const qualLabel=['Sehr schlecht','Schlecht','Ok','Gut','Sehr gut'];
   const [date,setDate]=useState(toDay());
@@ -3043,11 +2893,11 @@ function SchlafForm({ add, initialData, onSave, onClose, dismissed, onDismiss })
     <label style={ST.lbl}>Notiz</label>
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
     {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
-    <button style={ST.btn(C.sleep,'#EAE0D0')} onClick={()=>{ const d={hours,quality,note}; onSave?onSave(d):add('schlaf',d,date); }}>Speichern</button>
+    <button style={ST.btn(C.sleep,'#EAE0D0')} onClick={()=>{ const d={hours,quality,note}; if(onSave){onSave(d);}else{add('schlaf',d,date);onSaved?.('Schlaf',C.sleep);} }}>Speichern</button>
   </>;
 }
 
-function SchrittForm({ add, initialData, onSave, onClose, dismissed, onDismiss }) {
+function SchrittForm({ add, initialData, onSave, onClose, dismissed, onDismiss, onSaved }) {
   const [steps,setS]=useState(initialData?String(initialData.steps):''); const [note,setN]=useState(initialData?initialData.note||'':'');
   const [date,setDate]=useState(toDay());
   const tip = useTip('schritte');
@@ -3061,7 +2911,7 @@ function SchrittForm({ add, initialData, onSave, onClose, dismissed, onDismiss }
     <label style={ST.lbl}>Notiz</label>
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)} />
     {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
-    <button style={ST.btn(C.steps,'#EAE0D0')} onClick={()=>{ if(!steps)return; const d={steps:+steps,note}; onSave?onSave(d):add('schritte',d,date); }}>Speichern</button>
+    <button style={ST.btn(C.steps,'#EAE0D0')} onClick={()=>{ if(!steps)return; const d={steps:+steps,note}; if(onSave){onSave(d);}else{add('schritte',d,date);onSaved?.('Schritte',C.steps);} }}>Speichern</button>
   </>;
 }
 
@@ -3075,7 +2925,7 @@ function classifyHR(bpm) {
   if(bpm<=120)return {label:'Erhöht',            color:'#D0A060'};
   return             {label:'Tachykardie',       color:'#B87060'};
 }
-function HerzForm({ add, initialData, onSave, onClose, dismissed, onDismiss }) {
+function HerzForm({ add, initialData, onSave, onClose, dismissed, onDismiss, onSaved }) {
   const ctx=['Ruhe','Nach Sport','Aufwachen','Sonstiges'];
   const [bpm,setBpm]=useState(initialData?String(initialData.bpm):'');
   const [context,setCtx]=useState(initialData?.context||'Ruhe');
@@ -3098,7 +2948,7 @@ function HerzForm({ add, initialData, onSave, onClose, dismissed, onDismiss }) {
     <label style={ST.lbl}>Notiz</label>
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)}/>
     {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
-    <button style={ST.btn(C.heart)} onClick={()=>{if(!bpm)return;const d={bpm:+bpm,context,category:cls?.label||'',note};onSave?onSave(d):add('herz',d,date);}}>Speichern</button>
+    <button style={ST.btn(C.heart)} onClick={()=>{if(!bpm)return;const d={bpm:+bpm,context,category:cls?.label||'',note};if(onSave){onSave(d);}else{add('herz',d,date);onSaved?.('Herzfrequenz',C.heart);}}}>Speichern</button>
   </>;
 }
 
@@ -3111,7 +2961,7 @@ function classifyBP(sys,dia) {
   if(sys<180&&dia<110) return {label:'Hypertonie Grad 2',color:'#C07050'};
   return                      {label:'Hypertonie Grad 3',color:'#B87060'};
 }
-function BlutdruckForm({ add, initialData, onSave, onClose, dismissed, onDismiss }) {
+function BlutdruckForm({ add, initialData, onSave, onClose, dismissed, onDismiss, onSaved }) {
   const [sys,setSys]=useState(initialData?String(initialData.sys):'');
   const [dia,setDia]=useState(initialData?String(initialData.dia):'');
   const [pulse,setPulse]=useState(initialData?.pulse?String(initialData.pulse):'');
@@ -3142,12 +2992,12 @@ function BlutdruckForm({ add, initialData, onSave, onClose, dismissed, onDismiss
     <label style={ST.lbl}>Notiz</label>
     <input style={ST.inp} placeholder="optional" value={note} onChange={e=>setN(e.target.value)}/>
     {onClose&&<button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={onClose}>Abbrechen</button>}
-    <button style={ST.btn(C.bp)} onClick={()=>{if(!sys||!dia)return;const d={sys:+sys,dia:+dia,pulse:pulse?+pulse:null,classification:cls?.label||'',note};onSave?onSave(d):add('blutdruck',d,date);}}>Speichern</button>
+    <button style={ST.btn(C.bp)} onClick={()=>{if(!sys||!dia)return;const d={sys:+sys,dia:+dia,pulse:pulse?+pulse:null,classification:cls?.label||'',note};if(onSave){onSave(d);}else{add('blutdruck',d,date);onSaved?.('Blutdruck',C.bp);}}}>Speichern</button>
   </>;
 }
 
 // ── KoerpermassForm ────────────────────────────────────────────────────────────
-function KoerpermassForm({ add, initialData, onSave, onClose }) {
+function KoerpermassForm({ add, initialData, onSave, onClose, onSaved }) {
   const [taille,setT]=useState(initialData?String(initialData.taille||''):'');
   const [hufte,setH]=useState(initialData?String(initialData.hufte||''):'');
   const [brust,setBr]=useState(initialData?String(initialData.brust||''):'');
@@ -3173,7 +3023,7 @@ function KoerpermassForm({ add, initialData, onSave, onClose }) {
     <button style={ST.btn(C.mass,'#EAE0D0')} onClick={()=>{
       if(!taille&&!hufte&&!brust&&!arm)return;
       const d={taille:taille?+taille:null,hufte:hufte?+hufte:null,brust:brust?+brust:null,arm:arm?+arm:null,whr,note};
-      onSave?onSave(d):add('koerpermass',d,date);
+      if(onSave){onSave(d);}else{add('koerpermass',d,date);onSaved?.('Körpermaße',C.mass);}
     }}>Speichern</button>
   </>;
 }
@@ -3239,7 +3089,7 @@ function berechneZyklusTag(entries, datum) {
   return diff + 1;
 }
 
-function ZyklusForm({ add, entries, initialData, onSave, onClose }) {
+function ZyklusForm({ add, entries, initialData, onSave, onClose, onSaved }) {
   const init = initialData?.data || {};
   const [phase,   setPhase]   = useState(init.phase   || null);
   const [blutung, setBlutung] = useState(init.blutung ?? 0);
@@ -3261,7 +3111,7 @@ function ZyklusForm({ add, entries, initialData, onSave, onClose }) {
       lh_test: lhTest, zervix, symptome, zyklusTag,
       note, quelle: 'manual',
     };
-    onSave ? onSave(d) : add('zyklus', d, date);
+    if(onSave){onSave(d);}else{add('zyklus',d,date);onSaved?.('Zyklus',C.mood);}
   };
 
   return <>
@@ -3610,337 +3460,6 @@ function ProductDetail({ product, barcode, onConfirm, onBack }) {
     <button style={{...ST.outbtn(C.muted),marginTop:8}} onClick={onBack}>Zurück</button>
   </>;
 }
-
-// ── Manuelle Nährwert-Eingabe (Fallback wenn nicht in DB) ─────────────────────
-function ManualNutrition({ barcode, prefillName, onConfirm, onBack }) {
-  const [name,setN]=useState(prefillName||'');
-  const [kcal,setK]=useState('');
-  const [prot,setP]=useState('');
-  const [carb,setC]=useState('');
-  const [fat, setF]=useState('');
-  const [qty, setQ]=useState('100');
-  const [unit,setU]=useState('g');
-
-  const confirm = () => {
-    const q=Math.max(+qty||1,1);
-    onConfirm({ water:unit==='ml'?q:0, mealQ:3,
-      calories:Math.round((+kcal||0)*q/100),
-      protein: +((+prot||0)*q/100).toFixed(1),
-      carbs:   +((+carb||0)*q/100).toFixed(1),
-      fat:     +((+fat ||0)*q/100).toFixed(1),
-      productName:name||`Produkt${barcode?' ('+barcode+')':''}`,
-      brand:'', quantity:q, unit, barcode:barcode||'', note:'',
-    });
-  };
-
-  return <>
-    <div style={{padding:'10px 14px',background:`${C.water}0E`,border:`1px solid ${C.water}30`,borderRadius:10,marginBottom:14}}>
-      <div style={{fontSize:13,fontWeight:500,marginBottom:3}}>Nährwerte manuell eingeben</div>
-      <div style={{fontSize:12,color:C.muted}}>Produkt nicht in der Datenbank — Angaben vom Etikett übernehmen.</div>
-    </div>
-    <label style={ST.lbl}>Produktname</label>
-    <input style={ST.inp} placeholder="z.B. REWE Bio Mozzarella" value={name} onChange={e=>setN(e.target.value)}/>
-    <div style={ST.grid2}>
-      <div><label style={ST.lbl}>kcal / 100g</label><input style={ST.inp} type="number" inputMode="decimal" placeholder="250" value={kcal} onChange={e=>setK(e.target.value)}/></div>
-      <div><label style={ST.lbl}>Eiweiß (g)</label><input style={ST.inp} type="number" inputMode="decimal" placeholder="5.0" value={prot} onChange={e=>setP(e.target.value)}/></div>
-      <div><label style={ST.lbl}>Kohlenhydrate (g)</label><input style={ST.inp} type="number" inputMode="decimal" placeholder="30.0" value={carb} onChange={e=>setC(e.target.value)}/></div>
-      <div><label style={ST.lbl}>Fett (g)</label><input style={ST.inp} type="number" inputMode="decimal" placeholder="8.0" value={fat} onChange={e=>setF(e.target.value)}/></div>
-    </div>
-    <div style={{fontSize:11,color:C.faint,marginTop:-6,marginBottom:14}}>Alle Angaben pro 100g / 100ml</div>
-    <label style={ST.lbl}>Menge</label>
-    <div style={{display:'flex',gap:8,marginBottom:16}}>
-      <input style={{...ST.inp,marginBottom:0,flex:1}} type="number" inputMode="numeric" value={qty} onChange={e=>setQ(e.target.value)}/>
-      <div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',flexShrink:0}}>
-        {['g','ml'].map(u=>(<button key={u} onClick={()=>setU(u)}
-          style={{padding:'0 14px',background:unit===u?`${C.water}20`:'transparent',
-            color:unit===u?C.water:C.muted,border:'none',fontSize:13,fontWeight:unit===u?600:400}}>{u}</button>))}
-      </div>
-    </div>
-    <button style={ST.btn(C.water)} onClick={confirm}>Eintragen</button>
-    <button style={{...ST.outbtn(C.muted),marginTop:8}} onClick={onBack}>Zurück</button>
-  </>;
-}
-
-// ── ProductLookup — Scan- ODER Suchmodal ─────────────────────────────────────
-function ProductLookup({ mode, onSave, onClose }) {
-  // view: 'scan'|'photo'|'search'|'loading'|'product'|'notfound'|'manual'
-  const [view,    setView]   = useState(mode==='scan'?'scan':'search');
-  const [product, setProd]   = useState(null);
-  const [barcode, setBC]     = useState('');
-  const [errMsg,  setErr]    = useState('');
-  const [searchQ, setSQ]     = useState('');
-  const [results, setRes]    = useState([]);
-  const [srching, setSrch]   = useState(false);
-  const [manualIn,setMan]    = useState('');
-  const [prefill, setPre]    = useState('');
-
-  const videoRef   = useRef(null);
-  const captureRef = useRef(null);
-  const streamRef  = useRef(null);
-  const timerRef   = useRef(null);
-  const canvasRef  = useRef(document.createElement('canvas'));
-
-  const stopCam = () => {
-    clearTimeout(timerRef.current);
-    if (streamRef.current) { streamRef.current.getTracks().forEach(t=>t.stop()); streamRef.current=null; }
-  };
-
-  useEffect(() => () => stopCam(), []);
-
-  // Kamera für Live-Scan starten
-  const startLive = async () => {
-    setErr(''); setView('scan');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} }
-      });
-      streamRef.current = stream;
-      await new Promise(r=>setTimeout(r,50)); // kurz warten bis video gemounted
-      if (!videoRef.current) { stream.getTracks().forEach(t=>t.stop()); return; }
-      videoRef.current.srcObject = stream;
-      await videoRef.current.play().catch(()=>{});
-
-      const canvas = canvasRef.current;
-      const ctx    = canvas.getContext('2d');
-      const tick = async () => {
-          if (!streamRef.current) return;
-          const vid = videoRef.current;
-          if (vid && vid.readyState >= 2 && vid.videoWidth > 0) {
-            const result = await detectFromImage(vid);
-            if (result && streamRef.current) { stopCam(); fetchProd(result.code); return; }
-          }
-          timerRef.current = setTimeout(tick, 400);
-        };
-        tick();
-    } catch(err) {
-      stopCam();
-      if (err.name==='NotAllowedError') { setErr('Kamera-Zugriff verweigert'); }
-      // Live-Scan nicht verfügbar → Foto-Modus bleibt
-    }
-  };
-
-  // Kamera beim Scan-View starten
-  useEffect(() => {
-    if (view === 'scan') startLive();
-  }, []); // nur beim ersten Rendern wenn mode=scan
-
-  // ── Foto scannen ─────────────────────────────────────────────────────────
-  const handleCapture = async e => {
-    const file = e.target.files?.[0]; if (!file) return; e.target.value='';
-    setView('loading'); setErr('');
-    try {
-      // Bild-Element direkt nutzen — BarcodeDetector arbeitet besser mit <img> als Canvas
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      await new Promise((res,rej) => { img.onload=res; img.onerror=rej; img.src=url; });
-      const result = await detectFromImage(img);
-      URL.revokeObjectURL(url);
-      if (result) { stopCam(); fetchProd(result.code); }
-      else {
-        setErr('Kein Barcode erkannt. Tipps: Barcode gerade halten, gute Beleuchtung, möglichst nah herangehen und nur den Barcode im Bild.');
-        setView('scan');
-      }
-    } catch(e) { setErr('Fehler: '+e.message); setView('scan'); }
-  };
-
-  // ── OpenFoodFacts Barcode — DE zuerst, world als Fallback ────────────────
-  const fetchProd = async code => {
-    setBC(code); setView('loading');
-    try {
-      let json = null;
-      // Zuerst DE-Datenbank (Supermarktprodukte Deutschland)
-      try {
-        const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),10000);
-        const res = await fetch(
-          `https://de.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,nutriments,product_quantity_unit`,
-          { signal:ctrl.signal }
-        );
-        const j = await res.json();
-        if (j.status===1 && j.product?.product_name) json = j;
-      } catch(e1) {}
-      // Fallback: world.openfoodfacts.org
-      if (!json) {
-        const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),10000);
-        const res = await fetch(
-          `https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,nutriments,product_quantity_unit`,
-          { signal:ctrl.signal }
-        );
-        const j = await res.json();
-        if (j.status===1 && j.product?.product_name) json = j;
-      }
-      if (json) {
-        setProd(buildProd(json.product)); setView('product');
-      } else {
-        setPre(''); setView('notfound');
-      }
-    } catch(err) {
-      setErr(err.name==='AbortError'?'Zeitüberschreitung':'Netzwerkfehler');
-      setView('scan');
-    }
-  };
-
-  // ── OpenFoodFacts Suche ───────────────────────────────────────────────────
-  const doSearch = async q => {
-    if (!q.trim()) return;
-    setSrch(true); setErr(''); setRes([]);
-    try {
-      const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),12000);
-      const fields='code,product_name,brands,nutriments,product_quantity_unit';
-      const deUrl=`https://de.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&action=process&json=1&page_size=20&sort_by=unique_scans_n&fields=${fields}`;
-      const res   = await fetch(deUrl,{signal:ctrl.signal});
-      const json  = await res.json();
-      const off   = mkItems(json.products||[]);
-      setRes(off.slice(0,20));
-      if (!off.length) setErr('Keine Treffer — andere Schreibweise versuchen');
-    } catch {
-      setErr('Kein Netzwerk — manuelle Eingabe nutzen');
-    }
-    setSrch(false);
-  };
-
-  const mkItems = ps => ps.filter(p=>p.product_name?.trim()).map(p=>({
-    code:p.code, name:p.product_name.trim(),
-    brand:(p.brands||'').split(',')[0].trim(),
-    isLiq:(p.product_quantity_unit||'').toLowerCase().includes('ml'),
-    kcal:Math.round(pn((p.nutriments||{})['energy-kcal_100g'])),
-    nutriments:p.nutriments||{}, pqu:p.product_quantity_unit||'',
-  }));
-
-  const buildProd = p => {
-    const n=p.nutriments||{}, liq=(p.product_quantity_unit||'').toLowerCase().includes('ml');
-    return { name:(p.product_name||'Unbekannt').trim(), brand:(p.brands||'').split(',')[0].trim(), isLiq:liq,
-      per100:{ kcal:Math.round(pn(n['energy-kcal_100g'])||(pn(n['energy_100g'])/4.184)||0),
-        protein:+(pn(n['proteins_100g']).toFixed(1)), carbs:+(pn(n['carbohydrates_100g']).toFixed(1)),
-        fat:+(pn(n['fat_100g']).toFixed(1)), sugar:+(pn(n['sugars_100g']).toFixed(1)),
-        fiber:+(pn(n['fiber_100g']).toFixed(1)) } };
-  };
-
-  const safeTop='env(safe-area-inset-top,0px)';
-  const title = view==='search'||view==='loading'&&!barcode ? 'Produkt suchen' :
-                view==='product'||view==='notfound' ? 'Produkt gefunden' : 'Barcode scannen';
-
-  return (
-    <div style={{position:'fixed',inset:0,zIndex:400,background:C.bg,display:'flex',flexDirection:'column'}}>
-      <input ref={captureRef} type="file" accept="image/*" capture="environment" onChange={handleCapture} style={{display:'none'}}/>
-
-      {/* HEADER */}
-      <div style={{flexShrink:0,display:'flex',justifyContent:'space-between',alignItems:'center',
-          padding:`calc(${safeTop} + 16px) 20px 14px`,borderBottom:`1px solid ${C.border}`,background:C.bg}}>
-        <div style={{fontSize:16,fontWeight:600}}>{title}</div>
-        <button onClick={()=>{stopCam();onClose();}}
-          style={{background:C.faint,border:'none',color:C.text,fontSize:18,
-            width:34,height:34,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
-      </div>
-
-      {/* VIDEO — nur beim Scan sichtbar, immer im DOM */}
-      <div style={{flexShrink:0,background:'#000',overflow:'hidden',
-          height:view==='scan'&&streamRef.current?'auto':0,position:'relative'}}>
-        <div style={{position:'relative',paddingTop:'56.25%'}}>
-          <video ref={videoRef} playsInline muted autoPlay
-            style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}/>
-          <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
-            <div style={{width:'80%',aspectRatio:'3/1',border:`2px solid ${C.accent}`,borderRadius:8,
-                boxShadow:'0 0 0 9999px rgba(0,0,0,0.45)'}}/>
-          </div>
-          <div style={{position:'absolute',bottom:10,left:0,right:0,textAlign:'center',
-              fontSize:11,color:'rgba(234,224,208,0.9)',textShadow:'0 1px 4px #000',pointerEvents:'none'}}>
-            Barcode in den Rahmen halten
-          </div>
-        </div>
-      </div>
-
-      {/* INHALT */}
-      <div style={{flex:1,overflowY:'auto',padding:'16px 20px 40px'}}>
-
-        {view==='loading'&&<div style={{textAlign:'center',padding:'60px 0'}}>
-          <div style={{fontSize:28,color:C.water,marginBottom:12}}>⋯</div>
-          <div style={{fontSize:13,color:C.muted}}>{barcode?`Suche ${barcode}…`:'Wird gesucht…'}</div>
-        </div>}
-
-        {view==='scan'&&<>
-          {/* Status: welche Erkennungsmethoden verfügbar */}
-          <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
-            {[
-              ['BarcodeDetector', 'BarcodeDetector' in window],
-              ['Quagga', typeof Quagga!=='undefined'],
-            ].map(([l,ok])=>(
-              <span key={l} style={{fontSize:10,padding:'2px 8px',borderRadius:10,
-                background:ok?`${C.success}18`:`${C.danger}18`,
-                color:ok?C.success:C.muted}}>
-                {ok?'✓':'✗'} {l}
-              </span>
-            ))}
-          </div>
-          {errMsg&&<div style={{fontSize:12,color:C.danger,marginBottom:12,padding:'8px 12px',background:`${C.danger}14`,borderRadius:8}}>{errMsg}</div>}
-          <button style={{...ST.btn(C.water),marginBottom:10}} onClick={()=>captureRef.current.click()}>
-            📷 Foto aufnehmen & Barcode erkennen
-          </button>
-          <button style={{...ST.outbtn(C.muted),marginBottom:8}} onClick={()=>{stopCam();setView('search');}}>
-            🔍 Nach Namen suchen
-          </button>
-          <button style={ST.outbtn(C.muted)} onClick={()=>{stopCam();setMan('');setView('manualbc');}}>
-            ✎ Barcode manuell eingeben
-          </button>
-        </>}
-
-        {view==='search'&&<>
-          <div style={{display:'flex',gap:8,marginBottom:12}}>
-            <input style={{...ST.inp,marginBottom:0,flex:1}} placeholder="z.B. Vollmilch, Haferflocken, Joghurt…"
-              value={searchQ} onChange={e=>setSQ(e.target.value)}
-              onKeyDown={e=>e.key==='Enter'&&doSearch(searchQ)} autoFocus/>
-            <button onClick={()=>doSearch(searchQ)}
-              style={{background:C.water,color:C.bg,border:'none',borderRadius:8,padding:'0 16px',
-                fontSize:13,fontWeight:600,flexShrink:0,opacity:srching?0.6:1}}>
-              {srching?'…':'Suchen'}
-            </button>
-          </div>
-          {errMsg&&<div style={{fontSize:12,color:C.danger,marginBottom:12,padding:'8px 12px',background:`${C.danger}14`,borderRadius:8}}>{errMsg}</div>}
-          {results.map(r=>(
-            <button key={r.code||r.name} onClick={()=>{setProd(buildProd({product_name:r.name,brands:r.brand,nutriments:r.nutriments,product_quantity_unit:r.pqu}));setBC(r.code||'');setView('product');}}
-              style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:10,
-                padding:'12px 14px',textAlign:'left',marginBottom:6,display:'block'}}>
-              <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginBottom:2}}>{r.name}</div>
-              <div style={{display:'flex',justifyContent:'space-between'}}>
-                <span style={{fontSize:11,color:C.muted}}>{r.brand||'—'}</span>
-                {r.kcal>0&&<span style={{fontSize:11,color:C.accent,fontWeight:500}}>{r.kcal} kcal/100{r.isLiq?'ml':'g'}</span>}
-              </div>
-            </button>
-          ))}
-          {results.length>0&&<div style={{fontSize:11,color:C.faint,textAlign:'center',margin:'8px 0'}}>{results.length} Ergebnisse</div>}
-          <button style={{...ST.outbtn(C.muted),marginTop:8}} onClick={()=>{setPre(searchQ);setView('manual');}}>
-            Nährwerte manuell eingeben
-          </button>
-        </>}
-
-        {view==='manualbc'&&<>
-          <label style={ST.lbl}>Barcode-Nummer (EAN)</label>
-          <input style={ST.inp} type="number" inputMode="numeric" placeholder="z.B. 4388860678727"
-            value={manualIn} onChange={e=>setMan(e.target.value)}
-            onKeyDown={e=>e.key==='Enter'&&manualIn&&fetchProd(manualIn.trim())}/>
-          <button style={ST.btn(C.water)} onClick={()=>manualIn&&fetchProd(manualIn.trim())}>In Datenbank suchen</button>
-          <button style={{...ST.outbtn(C.muted),marginTop:8}} onClick={()=>setView('scan')}>Zurück</button>
-        </>}
-
-        {view==='product'&&product&&(
-          <ProductDetail product={product} barcode={barcode} onConfirm={onSave}
-            onBack={()=>{setProd(null);setView(mode==='scan'?'scan':'search');}}/>
-        )}
-
-        {view==='notfound'&&(
-          <ManualNutrition barcode={barcode} prefillName={prefill} onConfirm={onSave}
-            onBack={()=>setView(mode==='scan'?'scan':'search')}/>
-        )}
-
-        {view==='manual'&&(
-          <ManualNutrition barcode='' prefillName={prefill} onConfirm={onSave}
-            onBack={()=>setView('search')}/>
-        )}
-
-      </div>
-    </div>
-  );
-}
-
 
 function preview(e) {
   const d=e.data;
@@ -5402,13 +4921,15 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
           { label:'Alter',        value: s.alter   ? `${s.alter} Jahre` : '—' },
           { label:'Startgewicht', value: s.startWeight ? `${s.startWeight} kg` : '—' },
           { label:'Aktuell',      value: lastWeight ? `${lastWeight} kg` : '—' },
+          { label:'Zielgewicht',  value: s.zielgewicht ? `${s.zielgewicht} kg` : '—' },
           { label:'BMI',          value: bmi ? String(bmi) : '—', highlight: bmi ? (bmi<18.5?C.danger:bmi<25?C.success:bmi<30?C.accent:C.danger) : null },
         ];
       },
       editFields: [
-        { key:'height',      label:'Körpergröße (cm)', type:'number', mode:'numeric',  placeholder:'175', step:'1' },
-        { key:'alter',       label:'Alter (Jahre)',     type:'number', mode:'numeric',  placeholder:'25',  step:'1' },
-        { key:'startWeight', label:'Startgewicht (kg)', type:'number', mode:'decimal',  placeholder:'70',  step:'0.1' },
+        { key:'height',       label:'Körpergröße (cm)',  type:'number', mode:'numeric',  placeholder:'175', step:'1' },
+        { key:'alter',        label:'Alter (Jahre)',      type:'number', mode:'numeric',  placeholder:'25',  step:'1' },
+        { key:'startWeight',  label:'Startgewicht (kg)',  type:'number', mode:'decimal',  placeholder:'70',  step:'0.1' },
+        { key:'zielgewicht',  label:'Zielgewicht (kg)',   type:'number', mode:'decimal',  placeholder:'kein Ziel', step:'0.1' },
       ],
     },
 
@@ -5513,7 +5034,7 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
         { label:'Einträge gesamt',  value: String(totalEntries) },
         { label:'Tage getrackt',    value: String(trackingDays) },
         { label:'Metriken aktiv',   value: String(Object.keys(METRICS).filter(k=>entries.some(e=>e.type===k)).length) },
-        { label:'Version',          value: 'v7.0' },
+        { label:'Version',          value: 'v7.1' },
         { label:'Speicher',         value: 'localStorage · lokal' },
       ],
       readOnly: true,
@@ -5949,6 +5470,11 @@ function App() {
   const [journalAdd,setJournalAdd] = useState(null);
   const [showProfile,setShowProfile] = useState(false);
   const [undoEntry,  setUndoEntry]   = useState(null); // { entry, timer }
+  const [saveToast,  setSaveToast]   = useState(null); // { label, color }
+  const showSaveToast = React.useCallback((label, color) => {
+    setSaveToast({ label, color });
+    setTimeout(() => setSaveToast(null), 2200);
+  }, []);
 
   // ── Tipp-System: Dismiss-State ────────────────────────────────────────────
   const { dismissed, dismiss } = useDismiss();
@@ -6296,6 +5822,36 @@ function App() {
         )}
       </div>
 
+      {/* ── Gewichtsziel ── */}
+      {settings.zielgewicht && todayW && (()=>{
+        const diff = +(todayW - settings.zielgewicht).toFixed(1);
+        const absDiff = Math.abs(diff);
+        const reached = absDiff < 0.5;
+        const color = reached ? C.success : diff > 0 ? C.accent : C.sport;
+        const direction = diff > 0 ? 'abnehmen' : 'zunehmen';
+        return (
+          <div style={{...ST.card,padding:'12px 16px',marginBottom:10,
+            border:`1px solid ${color}30`,background:`${color}06`}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div>
+                <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:3}}>Gewichtsziel</div>
+                <div style={{fontSize:13,color:C.text}}>
+                  {reached
+                    ? <span style={{color:C.success,fontWeight:600}}>Ziel erreicht! 🎯</span>
+                    : <><span style={{color,fontWeight:600}}>{absDiff} kg</span>
+                       <span style={{color:C.muted}}> noch {direction} bis {settings.zielgewicht} kg</span></>
+                  }
+                </div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontSize:20,fontWeight:700,color,lineHeight:1}}>{todayW}</div>
+                <div style={{fontSize:10,color:C.muted,marginTop:2}}>kg aktuell</div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Weitere Ziele ── */}
       {weitereZiele.length > 0 && (
         <div style={{...ST.card,padding:'14px 16px',marginBottom:10}}>
@@ -6408,16 +5964,16 @@ function App() {
               <div style={{fontSize:10,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:2}}>Eintrag</div>
               <div style={{fontSize:16,fontWeight:600,color:METRICS[activeForm].color}}>{METRICS[activeForm].label}</div>
             </div>
-            {activeForm==='gewicht'    && <GewichtForm    add={add} settings={settings} dismissed={dismissed} onDismiss={dismiss}/>}
-            {activeForm==='sport'      && <SportForm      add={add} dismissed={dismissed} onDismiss={dismiss}/>}
-            {activeForm==='stimmung'   && <StimmungForm   add={add} dismissed={dismissed} onDismiss={dismiss}/>}
+            {activeForm==='gewicht'    && <GewichtForm    add={add} settings={settings} dismissed={dismissed} onDismiss={dismiss} onSaved={showSaveToast}/>}
+            {activeForm==='sport'      && <SportForm      add={add} dismissed={dismissed} onDismiss={dismiss} onSaved={showSaveToast} lastWeight={lastWeight}/>}
+            {activeForm==='stimmung'   && <StimmungForm   add={add} dismissed={dismissed} onDismiss={dismiss} onSaved={showSaveToast}/>}
             {activeForm==='ernaehrung' && <ErrorBoundary><ErnaehrungForm add={add} entries={entries}/></ErrorBoundary>}
-            {activeForm==='schlaf'     && <SchlafForm     add={add} dismissed={dismissed} onDismiss={dismiss}/>}
-            {activeForm==='schritte'   && <SchrittForm    add={add} dismissed={dismissed} onDismiss={dismiss}/>}
-            {activeForm==='herz'        && <HerzForm       add={add} dismissed={dismissed} onDismiss={dismiss}/>}
-            {activeForm==='blutdruck'   && <BlutdruckForm  add={add} dismissed={dismissed} onDismiss={dismiss}/>}
-            {activeForm==='koerpermass' && <KoerpermassForm add={add}/>}
-            {activeForm==='zyklus'      && <ZyklusForm add={add} entries={entries}/>}
+            {activeForm==='schlaf'     && <SchlafForm     add={add} dismissed={dismissed} onDismiss={dismiss} onSaved={showSaveToast}/>}
+            {activeForm==='schritte'   && <SchrittForm    add={add} dismissed={dismissed} onDismiss={dismiss} onSaved={showSaveToast}/>}
+            {activeForm==='herz'        && <HerzForm       add={add} dismissed={dismissed} onDismiss={dismiss} onSaved={showSaveToast}/>}
+            {activeForm==='blutdruck'   && <BlutdruckForm  add={add} dismissed={dismissed} onDismiss={dismiss} onSaved={showSaveToast}/>}
+            {activeForm==='koerpermass' && <KoerpermassForm add={add} onSaved={showSaveToast}/>}
+            {activeForm==='zyklus'      && <ZyklusForm add={add} entries={entries} onSaved={showSaveToast}/>}
           </div>
         : <div style={{...ST.card,padding:28,textAlign:'center',color:C.muted,fontSize:13}}>Kategorie oben auswählen</div>}
 
@@ -7278,7 +6834,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v7.0</span>
+          <span>v7.1</span>
         </div>
       </header>
 
@@ -7361,7 +6917,26 @@ function App() {
         />
       )}
 
-      {/* ── Undo-Toast (Eintrag gelöscht) ── */}
+      {/* ── Save-Toast (Eintrag gespeichert) ── */}
+      {saveToast && (
+        <div style={{
+          position:'fixed', bottom:`calc(${bot} + 56px)`, left:'50%', transform:'translateX(-50%)',
+          zIndex:501, display:'flex', alignItems:'center', gap:10,
+          background:C.card, border:`1px solid ${saveToast.color}40`,
+          borderRadius:10, padding:'10px 16px',
+          boxShadow:'0 4px 20px rgba(0,0,0,0.5)',
+          maxWidth:'calc(min(440px, 100vw) - 32px)', width:'max-content',
+          animation:'fadeInUp .2s ease',
+        }}>
+          <span style={{width:8,height:8,borderRadius:'50%',background:saveToast.color,flexShrink:0}}/>
+          <span style={{fontSize:13,color:C.text}}>
+            <span style={{color:saveToast.color,fontWeight:600}}>{saveToast.label}</span>
+            {' '}gespeichert
+          </span>
+        </div>
+      )}
+
+      {/* ── Undo-Toast (Eintrag gelöscht) ── */}}
       {undoEntry && (
         <div style={{
           position:'fixed', bottom:`calc(${bot} + 56px)`, left:'50%', transform:'translateX(-50%)',
