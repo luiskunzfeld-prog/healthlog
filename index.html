@@ -2102,6 +2102,76 @@ function ErnaehrungForm({ add, initialData, onSave, onClose, entries }) {
   const captureRef             = useRef(null);
   const abortRef               = useRef(null);
   const searchRef              = useRef(null);   // Re-Fokus nach Speichern
+  const liveVideoRef           = useRef(null);
+  const liveStreamRef          = useRef(null);
+  const liveTimerRef           = useRef(null);
+  const [liveScanning, setLiveScanning] = useState(false);
+  const [liveScanErr,  setLiveScanErr]  = useState('');
+
+  const stopLiveScan = () => {
+    clearTimeout(liveTimerRef.current);
+    if (liveStreamRef.current) { liveStreamRef.current.getTracks().forEach(t=>t.stop()); liveStreamRef.current=null; }
+    setLiveScanning(false);
+  };
+
+  // Cleanup wenn Komponente unmountet
+  React.useEffect(() => () => stopLiveScan(), []);
+
+  const startLiveScan = async () => {
+    setLiveScanErr('');
+    setLiveScanning(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} }
+      });
+      liveStreamRef.current = stream;
+      await new Promise(r=>setTimeout(r,80));
+      if (!liveVideoRef.current) { stream.getTracks().forEach(t=>t.stop()); return; }
+      liveVideoRef.current.srcObject = stream;
+      await liveVideoRef.current.play().catch(()=>{});
+      const tick = async () => {
+        if (!liveStreamRef.current) return;
+        const vid = liveVideoRef.current;
+        if (vid && vid.readyState >= 2 && vid.videoWidth > 0) {
+          const result = await detectFromImage(vid).catch(()=>null);
+          if (result) {
+            stopLiveScan();
+            setScanE('⏳ Produkt wird gesucht…');
+            let json = null;
+            try {
+              const ctrl = new AbortController(); setTimeout(()=>ctrl.abort(),10000);
+              const r = await fetch(`https://de.openfoodfacts.org/api/v2/product/${result.code}.json?fields=product_name,brands,nutriments,product_quantity_unit`,{signal:ctrl.signal});
+              const j = await r.json(); if (j.status===1&&j.product?.product_name) json=j;
+            } catch(e2) {}
+            if (!json) {
+              try {
+                const ctrl2 = new AbortController(); setTimeout(()=>ctrl2.abort(),10000);
+                const r2 = await fetch(`https://world.openfoodfacts.org/api/v2/product/${result.code}.json?fields=product_name,brands,nutriments,product_quantity_unit`,{signal:ctrl2.signal});
+                const j2 = await r2.json(); if (j2.status===1&&j2.product?.product_name) json=j2;
+              } catch(e3) {}
+            }
+            setScanE('');
+            if (json) {
+              const p = json.product;
+              pickProduct({name:p.product_name.trim(), brand:(p.brands||'').split(',')[0].trim(),
+                isLiq:(p.product_quantity_unit||'').toLowerCase().includes('ml'),
+                kcal:0, nutriments:p.nutriments||{}, pqu:p.product_quantity_unit||''});
+            } else {
+              setScanE(`❌ EAN ${result.code} nicht gefunden — manuell eingeben 👇`);
+              setScanManual(result.code);
+            }
+            return;
+          }
+        }
+        liveTimerRef.current = setTimeout(tick, 350);
+      };
+      tick();
+    } catch(err) {
+      stopLiveScan();
+      if (err.name==='NotAllowedError') setLiveScanErr('Kamera-Zugriff verweigert. Bitte in den Browser-Einstellungen erlauben.');
+      else setLiveScanErr('Kamera nicht verfügbar — Foto-Modus nutzen.');
+    }
+  };
 
   // Wasser-Tab
   const [water, setW]     = useState(initialData?.water ?? 0);
@@ -2409,11 +2479,31 @@ function ErnaehrungForm({ add, initialData, onSave, onClose, entries }) {
             value={searchQ} autoComplete="off"
             onChange={e=>{setSQ(e.target.value);doSearch(e.target.value);}}
             onKeyDown={e=>e.key==='Enter'&&doSearch(searchQ)}/>
-          <button onClick={()=>captureRef.current?.click()}
-            style={{background:`${C.water}20`,border:`1px solid ${C.water}40`,
-              borderRadius:8,padding:'0 14px',color:C.water,fontSize:20,
-              flexShrink:0,cursor:'pointer'}}>📷</button>
+          <button onClick={()=>liveScanning ? stopLiveScan() : startLiveScan()}
+            style={{background:liveScanning?`${C.danger}20`:`${C.water}20`,
+              border:`1px solid ${liveScanning?C.danger+'40':C.water+'40'}`,
+              borderRadius:8,padding:'0 14px',color:liveScanning?C.danger:C.water,fontSize:20,
+              flexShrink:0,cursor:'pointer'}}>{liveScanning?'✕':'📷'}</button>
         </div>
+
+        {/* ── Live-Scanner-Ansicht ── */}
+        {liveScanning&&(
+          <div style={{position:'relative',marginBottom:10,borderRadius:10,overflow:'hidden',
+            background:'#000',aspectRatio:'4/3',maxHeight:240}}>
+            <video ref={liveVideoRef} playsInline muted autoPlay
+              style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}/>
+            {/* Fadenkreuz */}
+            <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
+              <div style={{width:180,height:80,border:`2px solid ${C.water}`,borderRadius:8,
+                boxShadow:`0 0 0 2000px rgba(0,0,0,0.45)`}}/>
+            </div>
+            <div style={{position:'absolute',bottom:8,left:0,right:0,textAlign:'center',
+              fontSize:11,color:'#fff',opacity:0.8}}>Barcode in den Rahmen halten</div>
+          </div>
+        )}
+        {liveScanErr&&<div style={{fontSize:11,color:C.danger,marginBottom:8,padding:'8px 10px',
+          background:`${C.danger}14`,borderRadius:6}}>{liveScanErr}</div>}
+
         {scanErr&&<div style={{fontSize:11,color:scanErr.startsWith('⏳')?C.muted:C.danger,
           marginBottom:8,padding:'8px 10px',
           background:scanErr.startsWith('⏳')?`${C.muted}14`:`${C.danger}14`,
@@ -5361,7 +5451,7 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
         { label:'Einträge gesamt',  value: String(totalEntries) },
         { label:'Tage getrackt',    value: String(trackingDays) },
         { label:'Metriken aktiv',   value: String(Object.keys(METRICS).filter(k=>entries.some(e=>e.type===k)).length) },
-        { label:'Version',          value: 'v6.7' },
+        { label:'Version',          value: 'v6.8' },
         { label:'Speicher',         value: 'localStorage · lokal' },
       ],
       readOnly: true,
@@ -5819,7 +5909,8 @@ function App() {
 
   const add = useCallback((type,data,date=toDay())=>{
     setEntries(prev=>[{id:uid(),date,ts:new Date(date+'T12:00:00').getTime(),type,data,createdAt:Date.now()},...prev]);
-    setAF(null);
+    // Ernährung: in der Form bleiben (mehrere Einträge hintereinander möglich)
+    if (type !== 'ernaehrung') setAF(null);
   },[]);
 
   const del = useCallback(id=>setEntries(prev=>prev.filter(e=>e.id!==id)),[]);
@@ -7041,7 +7132,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v6.7</span>
+          <span>v6.8</span>
         </div>
       </header>
 
