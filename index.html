@@ -5034,7 +5034,7 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
         { label:'Einträge gesamt',  value: String(totalEntries) },
         { label:'Tage getrackt',    value: String(trackingDays) },
         { label:'Metriken aktiv',   value: String(Object.keys(METRICS).filter(k=>entries.some(e=>e.type===k)).length) },
-        { label:'Version',          value: 'v7.1' },
+        { label:'Version',          value: 'v7.2' },
         { label:'Speicher',         value: 'localStorage · lokal' },
       ],
       readOnly: true,
@@ -5747,139 +5747,243 @@ function App() {
         )}
       </div>
 
-      {/* ══ KALORIEN-KARTE ══ */}
-      <div style={{...ST.card,padding:'16px 16px 14px',marginBottom:10}}>
-        {/* Drei Werte nebeneinander */}
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}}>
-          <div>
-            <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:2}}>Gegessen</div>
-            <div style={{fontSize:24,fontWeight:700,color:C.accent,lineHeight:1}}>{todayKcal.toLocaleString('de-DE')}</div>
-            <div style={{fontSize:10,color:C.muted,marginTop:2}}>kcal</div>
-          </div>
-          <div style={{textAlign:'center'}}>
-            <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:2}}>Ziel heute</div>
-            <div style={{fontSize:24,fontWeight:700,color:C.text,lineHeight:1}}>{kcalZielHeute.toLocaleString('de-DE')}</div>
-            <div style={{fontSize:10,color:C.muted,marginTop:2}}>kcal</div>
-          </div>
-          <div style={{textAlign:'right'}}>
-            <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:2}}>
-              {ueberschuss>0?'Überschuss':'Noch übrig'}
-            </div>
-            <div style={{fontSize:24,fontWeight:700,lineHeight:1,
-              color:ueberschuss>0?C.danger:kcalRestPos<200&&todayKcal>0?C.success:C.text}}>
-              {(ueberschuss>0?ueberschuss:kcalRestPos).toLocaleString('de-DE')}
-            </div>
-            <div style={{fontSize:10,color:C.muted,marginTop:2}}>kcal</div>
-          </div>
-        </div>
+      {/* ══ KALORIEN-KARTE mit Ring ══ */}
+      {(()=>{
+        const MEAL_TAGS = ['Frühstück','Mittagessen','Abendessen','Snack'];
+        const mealData = MEAL_TAGS.map(tag => {
+          const items = todayEs.filter(e=>e.type==='ernaehrung'&&e.data.mealTag===tag);
+          const kcal = items.reduce((s,e)=>s+(e.data.calories||0),0);
+          const prot = +items.reduce((s,e)=>s+(e.data.protein||0),0).toFixed(1);
+          const carb = +items.reduce((s,e)=>s+(e.data.carbs||0),0).toFixed(1);
+          const fat  = +items.reduce((s,e)=>s+(e.data.fat||0),0).toFixed(1);
+          const names = [...new Set(items.filter(e=>e.data.productName).map(e=>e.data.productName))].slice(0,3).join(', ');
+          return {tag, kcal, prot, carb, fat, names, count:items.length};
+        });
+        // Ring berechnen
+        const circumference = 2 * Math.PI * 40;
+        const filled = Math.min(1, kcalZielHeute > 0 ? todayKcal / kcalZielHeute : 0);
+        const offset = circumference * (1 - filled);
+        const ringColor = ueberschuss > 0 ? C.danger : filled >= 0.95 ? C.success : C.accent;
+        // 7-Tage-Schnitt
+        const last7 = entries.filter(e=>{
+          const d = new Date(e.date); const now = new Date();
+          return e.type==='ernaehrung' && (now-d)/(1000*60*60*24) <= 7;
+        });
+        const days7 = [...new Set(last7.map(e=>e.date))].length || 1;
+        const avg7kcal = Math.round(last7.reduce((s,e)=>s+(e.data.calories||0),0) / days7);
+        // Ziele-erreicht Feedback
+        const goalsErreicht = [
+          kcalZielHeute>0 && todayKcal>=kcalBasis*0.9 && todayKcal<=kcalZielHeute,
+          settings.proteinZiel>0 && todayProt>=settings.proteinZiel,
+          settings.wasserZiel>0 && todayWtr>=settings.wasserZiel,
+          settings.sportZiel>0 && todayS>=settings.sportZiel,
+        ].filter(Boolean).length;
 
-        {/* Fortschrittsbalken */}
-        <div style={{height:6,background:C.border,borderRadius:3,marginBottom:10,overflow:'hidden'}}>
-          <div style={{width:kcalPct+'%',height:'100%',borderRadius:3,
-            background:ueberschuss>0?C.danger:kcalPct>=95?C.success:C.accent,
-            transition:'width .5s'}}/>
-        </div>
-
-        {/* Sport-Bonus-Banner — nur wenn Sport mit Kalorien eingetragen */}
-        {todaySportKcal > 0 && (
-          <div style={{background:`${C.sport}12`,border:`1px solid ${C.sport}30`,
-            borderRadius:8,padding:'8px 12px',marginBottom:10}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
-              <span style={{fontSize:11,color:C.sport,fontWeight:600}}>Sport-Bonus heute</span>
-              <span style={{fontSize:13,color:C.sport,fontWeight:700}}>+{todaySportKcal} kcal</span>
-            </div>
-            <div style={{fontSize:10,color:C.muted,lineHeight:1.7}}>
-              <span style={{color:C.faint}}>Grundziel</span>{' '}
-              <span style={{color:C.text,fontWeight:500}}>{kcalBasis.toLocaleString('de-DE')} kcal</span>
-              <span style={{color:C.faint}}>{' + Sport '}</span>
-              <span style={{color:C.sport,fontWeight:500}}>{todaySportKcal} kcal</span>
-              <span style={{color:C.faint}}>{' = Ziel '}</span>
-              <span style={{color:C.text,fontWeight:600}}>{kcalZielHeute.toLocaleString('de-DE')} kcal</span>
-            </div>
-          </div>
-        )}
-
-        {/* Makros — nur wenn Ziele gesetzt */}
-        {makros.length > 0 && (
-          <div style={{display:'flex',gap:6}}>
-            {makros.map(m => {
-              const p = pct(m.val, m.goal);
-              return (
-                <div key={m.label} style={{flex:1,background:C.cardAlt,borderRadius:8,padding:'8px 10px',
-                  border:`1px solid ${p>=100?m.clr+'50':C.border}`}}>
-                  <div style={{fontSize:9,color:C.muted,letterSpacing:0.6,textTransform:'uppercase',marginBottom:3}}>{m.label}</div>
-                  <div style={{fontSize:13,fontWeight:600,color:p>=100?m.clr:C.text,lineHeight:1}}>
-                    {m.val}<span style={{fontSize:9,color:C.muted,fontWeight:400}}>g</span>
+        return <>
+          <div style={{...ST.card,padding:'16px',marginBottom:10}}>
+            {/* Ring + Zahlen */}
+            <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:12}}>
+              {/* SVG Ring */}
+              <div style={{position:'relative',flexShrink:0,width:88,height:88}}>
+                <svg width="88" height="88" viewBox="0 0 88 88">
+                  <circle cx="44" cy="44" r="40" fill="none" stroke={C.faint} strokeWidth="8"/>
+                  <circle cx="44" cy="44" r="40" fill="none" stroke={ringColor} strokeWidth="8"
+                    strokeDasharray={circumference} strokeDashoffset={offset}
+                    strokeLinecap="round" transform="rotate(-90 44 44)"
+                    style={{transition:'stroke-dashoffset .6s ease'}}/>
+                </svg>
+                <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',
+                  alignItems:'center',justifyContent:'center'}}>
+                  <div style={{fontSize:ueberschuss>0?11:13,fontWeight:700,color:ringColor,lineHeight:1}}>
+                    {ueberschuss>0 ? '+'+ueberschuss : kcalRestPos}
                   </div>
-                  <div style={{height:2,background:C.border,borderRadius:1,marginTop:4}}>
-                    <div style={{width:p+'%',height:'100%',borderRadius:1,background:m.clr,transition:'width .4s'}}/>
+                  <div style={{fontSize:9,color:C.muted,marginTop:1,letterSpacing:0.3}}>
+                    {ueberschuss>0?'über':'übrig'}
                   </div>
-                  <div style={{fontSize:9,color:C.faint,marginTop:3}}>/ {m.goal}g</div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* ── Gewichtsziel ── */}
-      {settings.zielgewicht && todayW && (()=>{
-        const diff = +(todayW - settings.zielgewicht).toFixed(1);
-        const absDiff = Math.abs(diff);
-        const reached = absDiff < 0.5;
-        const color = reached ? C.success : diff > 0 ? C.accent : C.sport;
-        const direction = diff > 0 ? 'abnehmen' : 'zunehmen';
-        return (
-          <div style={{...ST.card,padding:'12px 16px',marginBottom:10,
-            border:`1px solid ${color}30`,background:`${color}06`}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <div>
-                <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:3}}>Gewichtsziel</div>
-                <div style={{fontSize:13,color:C.text}}>
-                  {reached
-                    ? <span style={{color:C.success,fontWeight:600}}>Ziel erreicht! 🎯</span>
-                    : <><span style={{color,fontWeight:600}}>{absDiff} kg</span>
-                       <span style={{color:C.muted}}> noch {direction} bis {settings.zielgewicht} kg</span></>
-                  }
                 </div>
               </div>
-              <div style={{textAlign:'right'}}>
-                <div style={{fontSize:20,fontWeight:700,color,lineHeight:1}}>{todayW}</div>
-                <div style={{fontSize:10,color:C.muted,marginTop:2}}>kg aktuell</div>
+              {/* Zahlen */}
+              <div style={{flex:1}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+                  <div>
+                    <div style={{fontSize:9,color:C.muted,letterSpacing:0.7,textTransform:'uppercase',marginBottom:1}}>Gegessen</div>
+                    <div style={{fontSize:18,fontWeight:700,color:C.accent,lineHeight:1}}>{todayKcal.toLocaleString('de-DE')}</div>
+                    <div style={{fontSize:9,color:C.muted}}>kcal</div>
+                  </div>
+                  <div style={{textAlign:'right'}}>
+                    <div style={{fontSize:9,color:C.muted,letterSpacing:0.7,textTransform:'uppercase',marginBottom:1}}>Ziel heute</div>
+                    <div style={{fontSize:18,fontWeight:700,color:C.text,lineHeight:1}}>{kcalZielHeute.toLocaleString('de-DE')}</div>
+                    <div style={{fontSize:9,color:C.muted}}>kcal</div>
+                  </div>
+                </div>
+                {/* Sport-Bonus */}
+                {todaySportKcal>0&&(
+                  <div style={{background:`${C.sport}12`,borderRadius:6,padding:'4px 8px',
+                    fontSize:10,color:C.sport,border:`1px solid ${C.sport}25`}}>
+                    Sport +{todaySportKcal} kcal · Basis {kcalBasis.toLocaleString('de-DE')}
+                  </div>
+                )}
               </div>
             </div>
-          </div>
-        );
-      })()}
 
-      {/* ── Weitere Ziele ── */}
-      {weitereZiele.length > 0 && (
-        <div style={{...ST.card,padding:'14px 16px',marginBottom:10}}>
-          <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:12}}>Weitere Ziele</div>
-          {weitereZiele.map(g => {
-            const p = pct(g.val, g.goal);
-            const displayVal = g.fmt ? g.fmt(g.val) : (g.val>0 ? g.val.toLocaleString('de-DE') : null);
+            {/* Makros */}
+            {[{l:'Eiweiß',v:+todayProt.toFixed(1),g:settings.proteinZiel,c:C.sport},
+              {l:'KH',    v:+todayCarb.toFixed(1),g:settings.kohlenhydrateZiel,c:C.water},
+              {l:'Fett',  v:+todayFat.toFixed(1), g:settings.fettZiel,c:C.mood}
+            ].some(m=>m.g>0) && (
+              <div style={{display:'flex',gap:6,marginBottom:10}}>
+                {[{l:'Eiweiß',v:+todayProt.toFixed(1),g:settings.proteinZiel,c:C.sport},
+                  {l:'KH',    v:+todayCarb.toFixed(1),g:settings.kohlenhydrateZiel,c:C.water},
+                  {l:'Fett',  v:+todayFat.toFixed(1), g:settings.fettZiel,c:C.mood}
+                ].map(m=>(
+                  <div key={m.l} style={{flex:1,background:C.cardAlt,borderRadius:8,padding:'7px 9px',
+                    border:`1px solid ${m.g>0&&m.v>=m.g?m.c+'40':C.border}`}}>
+                    <div style={{fontSize:9,color:C.muted,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>{m.l}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:m.g>0&&m.v>=m.g?m.c:C.text,lineHeight:1}}>
+                      {m.v}<span style={{fontSize:9,color:C.muted,fontWeight:400}}>g</span>
+                    </div>
+                    {m.g>0&&<>
+                      <div style={{height:2,background:C.border,borderRadius:1,marginTop:4}}>
+                        <div style={{width:Math.min(100,Math.round(m.v/m.g*100))+'%',height:'100%',
+                          borderRadius:1,background:m.c,transition:'width .4s'}}/>
+                      </div>
+                      <div style={{fontSize:9,color:C.faint,marginTop:2}}>/ {m.g}g</div>
+                    </>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 7-Tage-Schnitt */}
+            {avg7kcal>0&&days7>=2&&(
+              <div style={{fontSize:10,color:C.faint,textAlign:'right'}}>
+                Ø letzte 7 Tage: <span style={{color:C.muted,fontWeight:500}}>{avg7kcal.toLocaleString('de-DE')} kcal</span>
+              </div>
+            )}
+          </div>
+
+          {/* ── Mahlzeiten heute ── */}
+          <div style={{...ST.card,padding:'14px 16px',marginBottom:10}}>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:10}}>Mahlzeiten heute</div>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {mealData.map(m=>(
+                <div key={m.tag} style={{display:'flex',justifyContent:'space-between',alignItems:'center',
+                  padding:'8px 10px',borderRadius:8,
+                  background:m.count>0?C.cardAlt:'transparent',
+                  border:`1px solid ${m.count>0?C.border:C.faint+'40'}`}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:m.count>0?500:400,
+                      color:m.count>0?C.text:C.faint}}>{m.tag}</div>
+                    {m.count>0&&m.names&&(
+                      <div style={{fontSize:10,color:C.muted,marginTop:1,
+                        overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.names}</div>
+                    )}
+                  </div>
+                  {m.count>0?(
+                    <div style={{textAlign:'right',flexShrink:0,marginLeft:8}}>
+                      <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{m.kcal} kcal</div>
+                      <div style={{fontSize:10,color:C.muted,marginTop:1}}>
+                        {m.prot}g P · {m.carb}g KH · {m.fat}g F
+                      </div>
+                    </div>
+                  ):(
+                    <div style={{fontSize:11,color:C.faint,flexShrink:0}}>—</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Gewichtsziel ── */}
+          {settings.zielgewicht && todayW && (()=>{
+            const diff = +(todayW - settings.zielgewicht).toFixed(1);
+            const absDiff = Math.abs(diff);
+            const reached = absDiff < 0.5;
+            const color = reached ? C.success : diff > 0 ? C.accent : C.sport;
             return (
-              <div key={g.label} style={{marginBottom:10}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:3}}>
-                  <span style={{fontSize:11,color:C.muted}}>{g.label}</span>
-                  <span style={{fontSize:11,fontWeight:500,color:p>=100?C.success:displayVal?g.clr:C.faint}}>
-                    {displayVal??'—'}{' '}
-                    <span style={{color:C.faint,fontWeight:400}}>/ {g.goal.toLocaleString('de-DE')} {g.unit}</span>
-                  </span>
-                </div>
-                <div style={{height:3,background:C.border,borderRadius:2}}>
-                  <div style={{width:p+'%',height:'100%',borderRadius:2,
-                    background:p>=100?C.success:g.clr,transition:'width .4s'}}/>
+              <div style={{...ST.card,padding:'12px 16px',marginBottom:10,
+                border:`1px solid ${color}30`,background:`${color}06`}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <div>
+                    <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:3}}>Gewichtsziel</div>
+                    <div style={{fontSize:13,color:C.text}}>
+                      {reached
+                        ? <span style={{color:C.success,fontWeight:600}}>Ziel erreicht!</span>
+                        : <><span style={{color,fontWeight:600}}>{absDiff} kg</span>
+                           <span style={{color:C.muted}}> noch {diff>0?'abnehmen':'zunehmen'} bis {settings.zielgewicht} kg</span></>
+                      }
+                    </div>
+                  </div>
+                  <div style={{textAlign:'right'}}>
+                    <div style={{fontSize:20,fontWeight:700,color,lineHeight:1}}>{todayW}</div>
+                    <div style={{fontSize:10,color:C.muted,marginTop:2}}>kg</div>
+                  </div>
                 </div>
               </div>
             );
-          })}
-          <div style={{marginTop:6,fontSize:10,color:C.faint,textAlign:'right'}}>Ziele anpassen → Profil</div>
-        </div>
-      )}
+          })()}
 
-      {/* ── Stats-Kacheln ── */}
+          {/* ── Weitere Ziele ── */}
+          {(()=>{
+            const weitereZiele = [
+              {label:'Wasser',       val:todayWtr,               goal:settings.wasserZiel||2000, unit:'ml',   clr:C.water},
+              {label:'Sport',        val:todayS,                 goal:settings.sportZiel,        unit:'min',  clr:C.sport},
+              {label:'Schritte',     val:todaySteps,             goal:settings.schritteZiel,     unit:'Schr.',clr:C.steps,
+                fmt:v=>v>0?v.toLocaleString('de-DE'):null},
+              {label:'Schlaf',       val:todaySl||0,             goal:settings.schlafZiel,       unit:'Std',  clr:C.sleep,
+                fmt:v=>v>0?v:null},
+              {label:'Ballaststoffe',val:+todayFiber.toFixed(1), goal:settings.ballaststoffeZiel,unit:'g',    clr:C.success},
+            ].filter(g=>g.goal&&g.goal>0);
+            if(!weitereZiele.length) return null;
+            const pct = (val,goal) => goal>0?Math.min(100,Math.round(((val||0)/goal)*100)):0;
+            return (
+              <div style={{...ST.card,padding:'14px 16px',marginBottom:10}}>
+                <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:10}}>Weitere Ziele</div>
+                {weitereZiele.map(g=>{
+                  const p=pct(g.val,g.goal);
+                  const dv=g.fmt?g.fmt(g.val):(g.val>0?g.val.toLocaleString('de-DE'):null);
+                  return (
+                    <div key={g.label} style={{marginBottom:9}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:3}}>
+                        <span style={{fontSize:11,color:C.muted}}>{g.label}</span>
+                        <span style={{fontSize:11,fontWeight:500,color:p>=100?C.success:dv?g.clr:C.faint}}>
+                          {dv??'—'}{' '}<span style={{color:C.faint,fontWeight:400}}>/ {g.goal.toLocaleString('de-DE')} {g.unit}</span>
+                        </span>
+                      </div>
+                      <div style={{height:3,background:C.border,borderRadius:2}}>
+                        <div style={{width:p+'%',height:'100%',borderRadius:2,
+                          background:p>=100?C.success:g.clr,transition:'width .4s'}}/>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div style={{marginTop:4,fontSize:10,color:C.faint,textAlign:'right'}}>Ziele anpassen → Profil</div>
+              </div>
+            );
+          })()}
+
+          {/* ── Ziele-Feedback ── */}
+          {goalsErreicht >= 2 && (
+            <div style={{...ST.card,padding:'12px 16px',marginBottom:10,
+              background:`${C.success}08`,border:`1px solid ${C.success}30`,
+              display:'flex',alignItems:'center',gap:12}}>
+              <div style={{fontSize:22,flexShrink:0}}>
+                {goalsErreicht>=4?'🏆':goalsErreicht>=3?'⭐':'👍'}
+              </div>
+              <div>
+                <div style={{fontSize:13,fontWeight:600,color:C.success}}>
+                  {goalsErreicht>=4?'Perfekter Tag!':goalsErreicht>=3?'Sehr gut heute!':'Gut gemacht!'}
+                </div>
+                <div style={{fontSize:11,color:C.muted,marginTop:1}}>
+                  {goalsErreicht} von {[kcalZielHeute>0,settings.proteinZiel>0,settings.wasserZiel>0,settings.sportZiel>0].filter(Boolean).length} Tageszielen erreicht
+                </div>
+              </div>
+            </div>
+          )}
+        </>;
+      })()}
+
+            {/* ── Stats-Kacheln ── */}
       <div style={{...ST.grid2,gridTemplateColumns:'repeat(3,1fr)',marginBottom:4}}>
         {stats.slice(0,3).map(s=>(
           <div key={s.label} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:12}}>
@@ -5951,7 +6055,7 @@ function App() {
       <div style={ST.grid2}>
         {Object.entries(METRICS).map(([key,m])=>(
           <button key={key} style={{background:activeForm===key?`${m.color}14`:C.card,border:`1px solid ${activeForm===key?m.color+'60':C.border}`,borderRadius:12,padding:'14px 12px',textAlign:'left'}}
-            onClick={()=>setAF(key)}>
+            onClick={()=>setAF(activeForm===key?null:key)}>
             <Bar color={m.color}/>
             <div style={{fontSize:13,fontWeight:500,color:activeForm===key?m.color:C.text}}>{m.label}</div>
           </button>
@@ -5960,9 +6064,13 @@ function App() {
 
       {activeForm
         ? <div style={ST.card}>
-            <div style={{marginBottom:16}}>
-              <div style={{fontSize:10,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:2}}>Eintrag</div>
-              <div style={{fontSize:16,fontWeight:600,color:METRICS[activeForm].color}}>{METRICS[activeForm].label}</div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div>
+                <div style={{fontSize:10,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:2}}>Eintrag</div>
+                <div style={{fontSize:16,fontWeight:600,color:METRICS[activeForm].color}}>{METRICS[activeForm].label}</div>
+              </div>
+              <button onClick={()=>setAF(null)}
+                style={{background:'none',border:'none',color:C.muted,fontSize:22,padding:'4px 8px',cursor:'pointer',lineHeight:1}}>✕</button>
             </div>
             {activeForm==='gewicht'    && <GewichtForm    add={add} settings={settings} dismissed={dismissed} onDismiss={dismiss} onSaved={showSaveToast}/>}
             {activeForm==='sport'      && <SportForm      add={add} dismissed={dismissed} onDismiss={dismiss} onSaved={showSaveToast} lastWeight={lastWeight}/>}
@@ -6834,7 +6942,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v7.1</span>
+          <span>v7.2</span>
         </div>
       </header>
 
