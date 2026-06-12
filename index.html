@@ -650,15 +650,30 @@ const LOCAL_FOOD_DB = [
 function searchLocalFoods(query, limit=6) {
   if (!query || query.trim().length < 1) return [];
   const q = query.trim().toLowerCase();
+  // Suche nach einzelnen Wörtern → "Thunfisch Pizza" findet Pizza Margherita + Thunfisch
+  const words = q.split(/\s+/).filter(w => w.length >= 2);
   const scored = LOCAL_FOOD_DB.map(item => {
     const name = item.n.toLowerCase();
+    const allText = [name, ...item.syn].join(' ');
     let score = 0;
-    if (name === q)                      score = 100;
-    else if (name.startsWith(q))         score = 80;
-    else if (name.includes(q))           score = 60;
-    else if (item.syn.some(s => s === q))         score = 75;
-    else if (item.syn.some(s => s.startsWith(q))) score = 55;
-    else if (item.syn.some(s => s.includes(q)))   score = 35;
+    // Volltreffer (gesamter Query)
+    if (name === q)                score = 100;
+    else if (name.startsWith(q))   score = 85;
+    else if (name.includes(q))     score = 70;
+    else if (item.syn.some(s => s === q))          score = 80;
+    else if (item.syn.some(s => s.startsWith(q)))  score = 65;
+    else if (item.syn.some(s => s.includes(q)))    score = 50;
+    // Wort-für-Wort-Match: jedes Suchwort muss irgendwo vorkommen
+    if (score === 0 && words.length > 1) {
+      const allMatched = words.every(w => allText.includes(w));
+      const someMatched = words.filter(w => allText.includes(w)).length;
+      if (allMatched) score = 40;
+      else if (someMatched >= 1) score = 20 + someMatched * 5;
+    }
+    // Einzelwort-Match auch für kurze Queries
+    if (score === 0 && words.length === 1) {
+      if (allText.includes(words[0])) score = 30;
+    }
     return { item, score };
   }).filter(x => x.score > 0);
   scored.sort((a,b) => b.score - a.score);
@@ -1930,13 +1945,16 @@ function ErnaehrungForm({ add, initialData, onSave, onClose, entries }) {
     setRezResults([]);
   };
 
-  const rezUpdateQty = (i, newQty) => {
+  const rezUpdateQty = (i, rawVal) => {
     setRezZutaten(prev => prev.map((z,idx) => {
       if (idx !== i) return z;
-      const q = Math.max(1, +newQty||1);
+      // qtyStr: was der Nutzer tippt (auch leer/unfertig) — keine Zwangskorrektur
+      const qtyStr = rawVal;
+      const q = Math.max(1, +rawVal || 1);
       const p = z.per100;
       const ff = (v,d=1) => +((v||0)*q/100).toFixed(d);
-      return { ...z, qty:q,
+      return { ...z, qtyStr,
+        qty: q,
         kcal: Math.round((p.kcal||0)*q/100),
         protein: ff(p.protein), carbs: ff(p.carbs), sugar: ff(p.sugar),
         fat: ff(p.fat), satFat: ff(p.satFat), fiber: ff(p.fiber), salt: ff(p.salt, 2) };
@@ -2657,7 +2675,7 @@ function ErnaehrungForm({ add, initialData, onSave, onClose, entries }) {
                     textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{z.name}</div>
                   <div style={{fontSize:10,color:C.accent,marginTop:2}}>{z.kcal} kcal</div>
                 </div>
-                <input type="number" inputMode="numeric" value={z.qty}
+                <input type="number" inputMode="numeric" value={z.qtyStr !== undefined ? z.qtyStr : z.qty}
                   onChange={e=>rezUpdateQty(i,e.target.value)}
                   style={{width:60,padding:'4px 6px',background:C.card,border:`1px solid ${C.border}`,
                     borderRadius:6,color:C.text,fontSize:12,textAlign:'center'}}/>
@@ -5283,7 +5301,7 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
         { label:'Einträge gesamt',  value: String(totalEntries) },
         { label:'Tage getrackt',    value: String(trackingDays) },
         { label:'Metriken aktiv',   value: String(Object.keys(METRICS).filter(k=>entries.some(e=>e.type===k)).length) },
-        { label:'Version',          value: 'v6.4' },
+        { label:'Version',          value: 'v6.5' },
         { label:'Speicher',         value: 'localStorage · lokal' },
       ],
       readOnly: true,
@@ -6963,7 +6981,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v6.4</span>
+          <span>v6.5</span>
         </div>
       </header>
 
