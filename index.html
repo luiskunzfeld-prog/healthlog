@@ -5513,7 +5513,7 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
         { label:'Einträge gesamt',  value: String(totalEntries) },
         { label:'Tage getrackt',    value: String(trackingDays) },
         { label:'Metriken aktiv',   value: String(Object.keys(METRICS).filter(k=>entries.some(e=>e.type===k)).length) },
-        { label:'Version',          value: 'v6.9' },
+        { label:'Version',          value: 'v7.0' },
         { label:'Speicher',         value: 'localStorage · lokal' },
       ],
       readOnly: true,
@@ -6029,6 +6029,12 @@ function App() {
   const todaySteps= todayEs.filter(e=>e.type==='schritte').reduce((s,e)=>s+(e.data.steps||0),0);
   const todayHerz = todayEs.filter(e=>e.type==='herz').at(-1)?.data.bpm;
   const todayBP   = todayEs.filter(e=>e.type==='blutdruck').at(-1)?.data;
+  // Verbrannte Kalorien durch Sport heute (nur wenn im Sport-Eintrag eingetragen)
+  const todaySportKcal = todayEs.filter(e=>e.type==='sport').reduce((s,e)=>s+(e.data.calories||0),0);
+  // Effektives Kalorienziel: Grundziel + Sport-Bonus
+  const kcalBasis     = settings.kalorienZiel||2000;
+  const kcalZielHeute = kcalBasis + todaySportKcal;
+  const kcalRest      = kcalZielHeute - todayKcal;
 
   // ── Streak-Logik ───────────────────────────────────────────────────────────
   // Nur Einträge zählen, die am selben Tag erstellt wurden wie ihr Datum
@@ -6133,42 +6139,42 @@ function App() {
 
   // ── Dashboard ──────────────────────────────────────────────────────────────
   function Dashboard() {
-    const stats = [
-      {label:'Gewicht',  val:todayW,       unit:todayW?`BMI ${calcBMI(todayW,settings.height)}`:'kg', clr:C.accent},
-      {label:'Aktivität',val:todayS||null, unit:'min',                                                clr:C.sport},
-      {label:'Stimmung', val:todayM,       unit:todayM?'/10':'',                                      clr:C.mood},
-      {label:'Schlaf',   val:todaySl,      unit:todaySl?'Std':'',                                     clr:C.sleep},
-      {label:'Herzfrq.', val:todayHerz,    unit:todayHerz?'bpm':'',                                   clr:C.heart},
-      {label:'Blutdruck',val:todayBP?`${todayBP.sys}/${todayBP.dia}`:null,unit:todayBP?'mmHg':'',     clr:C.bp},
-    ];
-    const kcalGoal = settings.kalorienZiel||2000;
-    const wtrGoal  = settings.wasserZiel||2000;
-    const kcalPct  = Math.min(100,Math.round((todayKcal/kcalGoal)*100));
-    const wtrPct   = Math.min(100,Math.round((todayWtr/wtrGoal)*100));
+    const pct = (val,goal) => goal>0 ? Math.min(100, Math.round(((val||0)/goal)*100)) : 0;
 
-    // Alle konfigurierten Ziele als Fortschrittsbalken
-    const allGoals = [
-      { label:'Kalorien', val:todayKcal, goal:settings.kalorienZiel||2000, unit:'kcal', clr:C.accent, always:true },
-      { label:'Wasser',   val:todayWtr,  goal:settings.wasserZiel||2000,   unit:'ml',   clr:C.water,  always:true },
-      { label:'Eiweiß',   val:+todayProt.toFixed(1), goal:settings.proteinZiel,    unit:'g',    clr:C.sport,  always:false },
-      { label:'Kohlenhydrate',val:+todayCarb.toFixed(1),goal:settings.kohlenhydrateZiel,unit:'g',clr:C.water,always:false },
-      { label:'Fett',     val:+todayFat.toFixed(1),  goal:settings.fettZiel,       unit:'g',    clr:C.mood,   always:false },
-      { label:'Ballaststoffe',val:+todayFiber.toFixed(1),goal:settings.ballaststoffeZiel,unit:'g',clr:C.success,always:false },
-      { label:'Sport',    val:todayS,    goal:settings.sportZiel,          unit:'min',  clr:C.sport,  always:false },
-      { label:'Schritte', val:todaySteps,goal:settings.schritteZiel,       unit:'Schr.',clr:C.steps,  always:false,
+    const kcalPct     = pct(todayKcal, kcalZielHeute);
+    const kcalRestPos = Math.max(0, kcalRest);
+    const ueberschuss = kcalRest < 0 ? Math.abs(kcalRest) : 0;
+
+    const makros = [
+      { label:'Eiweiß',    val:+todayProt.toFixed(1), goal:settings.proteinZiel,        unit:'g', clr:C.sport },
+      { label:'Kohlenhy.', val:+todayCarb.toFixed(1), goal:settings.kohlenhydrateZiel,  unit:'g', clr:C.water },
+      { label:'Fett',      val:+todayFat.toFixed(1),  goal:settings.fettZiel,           unit:'g', clr:C.mood  },
+    ].filter(m => m.goal && m.goal > 0);
+
+    const weitereZiele = [
+      { label:'Wasser',       val:todayWtr,                goal:settings.wasserZiel||2000,     unit:'ml',   clr:C.water  },
+      { label:'Sport',        val:todayS,                  goal:settings.sportZiel,            unit:'min',  clr:C.sport  },
+      { label:'Schritte',     val:todaySteps,              goal:settings.schritteZiel,         unit:'Schr.',clr:C.steps,
         fmt:v=>v>0?v.toLocaleString('de-DE'):null },
-      { label:'Schlaf',   val:todaySl||0,goal:settings.schlafZiel,         unit:'Std',  clr:C.sleep,  always:false,
+      { label:'Schlaf',       val:todaySl||0,              goal:settings.schlafZiel,           unit:'Std',  clr:C.sleep,
         fmt:v=>v>0?v:null },
-    ].filter(g => g.always || (g.goal && g.goal > 0));
+      { label:'Ballaststoffe',val:+todayFiber.toFixed(1),  goal:settings.ballaststoffeZiel,    unit:'g',    clr:C.success },
+    ].filter(g => g.goal && g.goal > 0);
 
-    const pct = (val,goal) => Math.min(100, Math.round(((val||0)/goal)*100));
+    const stats = [
+      {label:'Gewicht',  val:todayW,       unit:todayW?`BMI ${calcBMI(todayW,settings.height)}`:'—', clr:C.accent},
+      {label:'Stimmung', val:todayM,       unit:todayM?'/10':'—',   clr:C.mood},
+      {label:'Schlaf',   val:todaySl,      unit:todaySl?'Std':'—',  clr:C.sleep},
+      {label:'Herzfrq.', val:todayHerz,    unit:todayHerz?'bpm':'—',clr:C.heart},
+      {label:'Blutdruck',val:todayBP?`${todayBP.sys}/${todayBP.dia}`:null,unit:todayBP?'mmHg':'—',clr:C.bp},
+    ];
+
     return <>
-      <div style={{marginBottom:20}}>
+      {/* ── Header + Streak ── */}
+      <div style={{marginBottom:16}}>
         <div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Heute</div>
         <div style={{fontFamily:"'DM Serif Display',Georgia,serif",fontSize:22,fontWeight:400,lineHeight:1.25,marginBottom:10}}>{dayStr}</div>
-
-        {/* ── Streak-Badge — immer sichtbar ── */}
-        <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:streakData.atRisk?0:0}}>
+        <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
           <div style={{display:'flex',alignItems:'center',gap:10,
             background:streakData.count>0?`${C.accent}15`:C.cardAlt,
             border:`1px solid ${streakData.count>0?C.accent+'40':C.border}`,
@@ -6180,9 +6186,7 @@ function App() {
                 ))}
               </div>
               <div>
-                <div style={{fontSize:16,fontWeight:700,color:C.accent,lineHeight:1}}>
-                  {streakData.count} {streakData.count===1?'Tag':'Tage'}
-                </div>
+                <div style={{fontSize:16,fontWeight:700,color:C.accent,lineHeight:1}}>{streakData.count} {streakData.count===1?'Tag':'Tage'}</div>
                 <div style={{fontSize:10,color:C.accent,opacity:0.7,letterSpacing:0.5,marginTop:1}}>STREAK</div>
               </div>
             </> : <>
@@ -6200,8 +6204,6 @@ function App() {
             <div style={{fontSize:10,color:C.muted}}>Shield verfügbar</div>
           )}
         </div>
-
-        {/* ── Streak-Shield Banner ── */}
         {streakData.atRisk&&streakData.saveAvailable&&(
           <div style={{marginTop:10,background:C.cardAlt,border:`1px solid ${C.border}`,
             borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
@@ -6219,49 +6221,128 @@ function App() {
         )}
       </div>
 
-      {/* ── Tagesziele Fortschritt ── */}
-      <div style={{...ST.card,padding:'14px 16px',marginBottom:12}}>
-        <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:14}}>Tagesziele</div>
-        {allGoals.map(g=>{
-          const p = pct(g.val, g.goal);
-          const displayVal = g.fmt ? g.fmt(g.val) : (g.val>0 ? g.val.toLocaleString('de-DE') : null);
-          return (
-            <div key={g.label} style={{marginBottom:12}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:4}}>
-                <span style={{fontSize:11,color:C.muted}}>{g.label}</span>
-                <span style={{fontSize:11,color:p>=100?C.success:displayVal?g.clr:C.faint,fontWeight:500}}>
-                  {displayVal??'—'} <span style={{color:C.faint,fontWeight:400}}>/ {g.goal.toLocaleString('de-DE')} {g.unit}</span>
-                </span>
-              </div>
-              <div style={{height:3,background:C.border,borderRadius:2}}>
-                <div style={{width:p+'%',height:'100%',borderRadius:2,
-                  background:p>=100?C.success:g.clr,transition:'width .4s'}}/>
-              </div>
+      {/* ══ KALORIEN-KARTE ══ */}
+      <div style={{...ST.card,padding:'16px 16px 14px',marginBottom:10}}>
+        {/* Drei Werte nebeneinander */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}}>
+          <div>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:2}}>Gegessen</div>
+            <div style={{fontSize:24,fontWeight:700,color:C.accent,lineHeight:1}}>{todayKcal.toLocaleString('de-DE')}</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:2}}>kcal</div>
+          </div>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:2}}>Ziel heute</div>
+            <div style={{fontSize:24,fontWeight:700,color:C.text,lineHeight:1}}>{kcalZielHeute.toLocaleString('de-DE')}</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:2}}>kcal</div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:2}}>
+              {ueberschuss>0?'Überschuss':'Noch übrig'}
             </div>
-          );
-        })}
-        <div style={{marginTop:4,fontSize:10,color:C.faint,textAlign:'right'}}>
-          Ziele anpassen → Profil
+            <div style={{fontSize:24,fontWeight:700,lineHeight:1,
+              color:ueberschuss>0?C.danger:kcalRestPos<200&&todayKcal>0?C.success:C.text}}>
+              {(ueberschuss>0?ueberschuss:kcalRestPos).toLocaleString('de-DE')}
+            </div>
+            <div style={{fontSize:10,color:C.muted,marginTop:2}}>kcal</div>
+          </div>
         </div>
+
+        {/* Fortschrittsbalken */}
+        <div style={{height:6,background:C.border,borderRadius:3,marginBottom:10,overflow:'hidden'}}>
+          <div style={{width:kcalPct+'%',height:'100%',borderRadius:3,
+            background:ueberschuss>0?C.danger:kcalPct>=95?C.success:C.accent,
+            transition:'width .5s'}}/>
+        </div>
+
+        {/* Sport-Bonus-Banner — nur wenn Sport mit Kalorien eingetragen */}
+        {todaySportKcal > 0 && (
+          <div style={{background:`${C.sport}12`,border:`1px solid ${C.sport}30`,
+            borderRadius:8,padding:'8px 12px',marginBottom:10}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+              <span style={{fontSize:11,color:C.sport,fontWeight:600}}>Sport-Bonus heute</span>
+              <span style={{fontSize:13,color:C.sport,fontWeight:700}}>+{todaySportKcal} kcal</span>
+            </div>
+            <div style={{fontSize:10,color:C.muted,lineHeight:1.7}}>
+              <span style={{color:C.faint}}>Grundziel</span>{' '}
+              <span style={{color:C.text,fontWeight:500}}>{kcalBasis.toLocaleString('de-DE')} kcal</span>
+              <span style={{color:C.faint}}>{' + Sport '}</span>
+              <span style={{color:C.sport,fontWeight:500}}>{todaySportKcal} kcal</span>
+              <span style={{color:C.faint}}>{' = Ziel '}</span>
+              <span style={{color:C.text,fontWeight:600}}>{kcalZielHeute.toLocaleString('de-DE')} kcal</span>
+            </div>
+          </div>
+        )}
+
+        {/* Makros — nur wenn Ziele gesetzt */}
+        {makros.length > 0 && (
+          <div style={{display:'flex',gap:6}}>
+            {makros.map(m => {
+              const p = pct(m.val, m.goal);
+              return (
+                <div key={m.label} style={{flex:1,background:C.cardAlt,borderRadius:8,padding:'8px 10px',
+                  border:`1px solid ${p>=100?m.clr+'50':C.border}`}}>
+                  <div style={{fontSize:9,color:C.muted,letterSpacing:0.6,textTransform:'uppercase',marginBottom:3}}>{m.label}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:p>=100?m.clr:C.text,lineHeight:1}}>
+                    {m.val}<span style={{fontSize:9,color:C.muted,fontWeight:400}}>g</span>
+                  </div>
+                  <div style={{height:2,background:C.border,borderRadius:1,marginTop:4}}>
+                    <div style={{width:p+'%',height:'100%',borderRadius:1,background:m.clr,transition:'width .4s'}}/>
+                  </div>
+                  <div style={{fontSize:9,color:C.faint,marginTop:3}}>/ {m.goal}g</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      <div style={{...ST.grid2, gridTemplateColumns:'1fr 1fr 1fr'}}>
+      {/* ── Weitere Ziele ── */}
+      {weitereZiele.length > 0 && (
+        <div style={{...ST.card,padding:'14px 16px',marginBottom:10}}>
+          <div style={{fontSize:10,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:12}}>Weitere Ziele</div>
+          {weitereZiele.map(g => {
+            const p = pct(g.val, g.goal);
+            const displayVal = g.fmt ? g.fmt(g.val) : (g.val>0 ? g.val.toLocaleString('de-DE') : null);
+            return (
+              <div key={g.label} style={{marginBottom:10}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:3}}>
+                  <span style={{fontSize:11,color:C.muted}}>{g.label}</span>
+                  <span style={{fontSize:11,fontWeight:500,color:p>=100?C.success:displayVal?g.clr:C.faint}}>
+                    {displayVal??'—'}{' '}
+                    <span style={{color:C.faint,fontWeight:400}}>/ {g.goal.toLocaleString('de-DE')} {g.unit}</span>
+                  </span>
+                </div>
+                <div style={{height:3,background:C.border,borderRadius:2}}>
+                  <div style={{width:p+'%',height:'100%',borderRadius:2,
+                    background:p>=100?C.success:g.clr,transition:'width .4s'}}/>
+                </div>
+              </div>
+            );
+          })}
+          <div style={{marginTop:6,fontSize:10,color:C.faint,textAlign:'right'}}>Ziele anpassen → Profil</div>
+        </div>
+      )}
+
+      {/* ── Stats-Kacheln ── */}
+      <div style={{...ST.grid2,gridTemplateColumns:'repeat(3,1fr)',marginBottom:4}}>
         {stats.slice(0,3).map(s=>(
-          <div key={s.label} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:14}}>
+          <div key={s.label} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:12}}>
             <Bar color={s.clr}/>
-            <div style={{fontSize:9,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5}}>{s.label}</div>
-            <div style={{fontSize:s.val!=null&&String(s.val).length>4?16:22,fontWeight:600,color:s.val!=null?s.clr:C.faint,lineHeight:1}}>{s.val??'—'}</div>
-            <div style={{fontSize:10,color:C.muted,marginTop:3}}>{s.unit}</div>
+            <div style={{fontSize:9,color:C.muted,letterSpacing:0.7,textTransform:'uppercase',marginBottom:4}}>{s.label}</div>
+            <div style={{fontSize:s.val!=null&&String(s.val).length>4?14:20,fontWeight:600,
+              color:s.val!=null?s.clr:C.faint,lineHeight:1}}>{s.val??'—'}</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:2}}>{s.unit}</div>
           </div>
         ))}
       </div>
-      <div style={ST.grid2}>
+      <div style={{...ST.grid2,marginBottom:10}}>
         {stats.slice(3).map(s=>(
-          <div key={s.label} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:14}}>
+          <div key={s.label} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:12}}>
             <Bar color={s.clr}/>
-            <div style={{fontSize:9,color:C.muted,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5}}>{s.label}</div>
-            <div style={{fontSize:s.val!=null&&String(s.val).length>4?16:22,fontWeight:600,color:s.val!=null?s.clr:C.faint,lineHeight:1}}>{s.val??'—'}</div>
-            <div style={{fontSize:10,color:C.muted,marginTop:3}}>{s.unit}</div>
+            <div style={{fontSize:9,color:C.muted,letterSpacing:0.7,textTransform:'uppercase',marginBottom:4}}>{s.label}</div>
+            <div style={{fontSize:s.val!=null&&String(s.val).length>4?14:20,fontWeight:600,
+              color:s.val!=null?s.clr:C.faint,lineHeight:1}}>{s.val??'—'}</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:2}}>{s.unit}</div>
           </div>
         ))}
       </div>
@@ -6269,6 +6350,7 @@ function App() {
       {/* ── Tipp des Tages ── */}
       <DailyTipCard entries={entries} dismissed={dismissed} onDismiss={dismiss}/>
 
+      {/* ── Schnelleintrag ── */}
       <div style={ST.secttl}>Schnelleintrag</div>
       <div style={ST.grid2}>
         {Object.entries(METRICS).map(([key,m])=>(
@@ -6281,8 +6363,11 @@ function App() {
         ))}
       </div>
 
+      {/* ── Letzte Einträge ── */}
       {entries.length===0
-        ? <div style={{...ST.card,textAlign:'center',padding:36}}><div style={{fontSize:13,color:C.muted,lineHeight:1.7}}>Noch keine Einträge.<br/>Starte mit dem ersten Eintrag.</div></div>
+        ? <div style={{...ST.card,textAlign:'center',padding:36}}>
+            <div style={{fontSize:13,color:C.muted,lineHeight:1.7}}>Noch keine Einträge.<br/>Starte mit dem ersten Eintrag.</div>
+          </div>
         : <>
           <div style={ST.secttl}>Zuletzt eingetragen</div>
           {entries.slice(0,6).map(e=>(
@@ -6301,7 +6386,6 @@ function App() {
         </>}
     </>;
   }
-
   // ── Eingabe ────────────────────────────────────────────────────────────────
   function Eingabe() {
     // Local height state — onBlur to avoid re-render on each keystroke
@@ -7194,7 +7278,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v6.9</span>
+          <span>v7.0</span>
         </div>
       </header>
 
