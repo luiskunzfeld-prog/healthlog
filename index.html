@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>HealthLog</title>
-  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="HealthLog" />
   <meta name="theme-color" content="#0A0806" />
@@ -5034,7 +5034,7 @@ function ProfilePanel({ settings, setSettings, onClose, top, entries }) {
         { label:'Einträge gesamt',  value: String(totalEntries) },
         { label:'Tage getrackt',    value: String(trackingDays) },
         { label:'Metriken aktiv',   value: String(Object.keys(METRICS).filter(k=>entries.some(e=>e.type===k)).length) },
-        { label:'Version',          value: 'v7.2' },
+        { label:'Version',          value: 'v7.3' },
         { label:'Speicher',         value: 'localStorage · lokal' },
       ],
       readOnly: true,
@@ -6942,7 +6942,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v7.2</span>
+          <span>v7.3</span>
         </div>
       </header>
 
@@ -7044,7 +7044,7 @@ function App() {
         </div>
       )}
 
-      {/* ── Undo-Toast (Eintrag gelöscht) ── */}}
+      {/* ── Undo-Toast (Eintrag gelöscht) ── */}
       {undoEntry && (
         <div style={{
           position:'fixed', bottom:`calc(${bot} + 56px)`, left:'50%', transform:'translateX(-50%)',
