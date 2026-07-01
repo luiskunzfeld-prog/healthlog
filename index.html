@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>HealthLog</title>
+  <title>Vitora</title>
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="HealthLog" />
+  <meta name="apple-mobile-web-app-title" content="Vitora" />
   <meta name="theme-color" content="#0A0806" />
   <!-- manifest loaded dynamically below -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -3483,7 +3483,7 @@ function preview(e) {
 
 // ── Universal Health Import ─────────────────────────────────────────────────
 // Unterstützt: Apple Health, Google Fit, Samsung Health, Garmin, Fitbit,
-//              MyFitnessPal, HealthLog JSON Backup, Generic CSV
+//              MyFitnessPal, Vitora JSON Backup, Generic CSV
 // Partial Import: Importiert was geht, meldet was nicht klappt
 
 function HealthImport({ onImport, settings }) {
@@ -3502,7 +3502,7 @@ function HealthImport({ onImport, settings }) {
     if (names.some(n=>n.includes('daily_activity_metrics'))) return 'google';
     if (rawText) {
       if (rawText.includes('<HealthData') || rawText.includes('HKQuantityTypeIdentifier')) return 'apple';
-      try { const j=JSON.parse(rawText); if (j.entries) return 'healthlog'; if (j.bucket||j.session) return 'google'; } catch{}
+      try { const j=JSON.parse(rawText); if (j.entries) return 'vitora'; if (j.bucket||j.session) return 'google'; } catch{}
       if (rawText.trim().startsWith('{')) { try { const j=JSON.parse(rawText); if (j.date&&j.weight) return 'fitbit-weight'; } catch{} }
       if (rawText.includes('Date,Calories') || rawText.includes('Food Name,Calories')) return 'mfp';
       if (rawText.includes('Date,Steps') || rawText.includes('date,steps')) return 'csv-steps';
@@ -3791,7 +3791,7 @@ function HealthImport({ onImport, settings }) {
   // Flo Export: Einstellungen → Daten verwalten → Daten exportieren → CSV
   // Spalten: Date, Menstruation, Cramps_intensity, Mood, Headache, Water_retention, ...
   // ─────────────────────────────────────────────────────────────────────────
-  // Adapter-Mapping: Flo CSV → HealthLog ZyklusEntry
+  // Adapter-Mapping: Flo CSV → Vitora ZyklusEntry
   // ─────────────────────────────────────────────────────────────────────────
   const parseFlo = (rawText, entries, errors) => {
     let zk=0;
@@ -3866,7 +3866,7 @@ function HealthImport({ onImport, settings }) {
   // Clue Export: Konto → Daten exportieren → CSV (pro Kategorie eine Datei)
   // Typische Clue-Spalten: Date, Bleeding, Pain (Cramps), Mood, Energy, Sleep, ...
   // ─────────────────────────────────────────────────────────────────────────
-  // Adapter-Mapping: Clue CSV → HealthLog ZyklusEntry
+  // Adapter-Mapping: Clue CSV → Vitora ZyklusEntry
   // ─────────────────────────────────────────────────────────────────────────
   const parseClue = (rawText, entries, errors) => {
     let zk=0;
@@ -3974,14 +3974,14 @@ function HealthImport({ onImport, settings }) {
     return {source:'CSV',count};
   };
 
-  // ── HealthLog JSON Backup Parser ──────────────────────────────────────────
-  const parseHealthLogJSON = (rawText, entries, errors) => {
+  // ── Vitora JSON Backup Parser ──────────────────────────────────────────
+  const parseVitoraJSON = (rawText, entries, errors) => {
     try{
       const j=JSON.parse(rawText);
       const imported=(j.entries||[]).filter(e=>e.id&&e.date&&e.type&&e.data);
       imported.forEach(e=>entries.push({...e,id:uid(),note:(e.data?.note||'')+' (importiert)'}));
-      return {source:'HealthLog Backup',count:imported.length};
-    }catch(e){errors.push('JSON: '+e.message);return {source:'HealthLog Backup',count:0};}
+      return {source:'Vitora Backup',count:imported.length};
+    }catch(e){errors.push('JSON: '+e.message);return {source:'Vitora Backup',count:0};}
   };
 
   // ── Haupt-Parser ──────────────────────────────────────────────────────────
@@ -4029,8 +4029,8 @@ function HealthImport({ onImport, settings }) {
         stats=parseFlo(rawText||'',entries,errors);
       } else if(format==='clue'){
         stats=parseClue(rawText||'',entries,errors);
-      } else if(format==='healthlog'||format==='json'){
-        stats=parseHealthLogJSON(rawText||'',entries,errors);
+      } else if(format==='vitora'||format==='json'){
+        stats=parseVitoraJSON(rawText||'',entries,errors);
       } else if(format==='csv-steps'||format==='csv'){
         stats=parseGenericCSV(rawText||'',entries,errors);
       } else {
@@ -4053,7 +4053,7 @@ function HealthImport({ onImport, settings }) {
           } else if(rawText.trim().startsWith('[')&&rawText.includes('weight')){
             stats=parseFitbit(null,rawText,entries,errors);
           } else if(rawText.includes('{')&&rawText.includes('entries')){
-            stats=parseHealthLogJSON(rawText,entries,errors);
+            stats=parseVitoraJSON(rawText,entries,errors);
           } else if(rawText.includes(',')&&rawText.split('\n')[0].includes('ate')){
             stats=parseGenericCSV(rawText,entries,errors);
           }
@@ -4082,7 +4082,7 @@ function HealthImport({ onImport, settings }) {
     {id:'samsung',  l:'Samsung Health'},
     {id:'fitbit',   l:'Fitbit'},
     {id:'mfp',      l:'MyFitnessPal'},
-    {id:'json',     l:'HealthLog JSON'},
+    {id:'json',     l:'Vitora JSON'},
     {id:'csv',      l:'Eigene CSV'},
     {id:'flo',      l:'Flo'},
     {id:'clue',     l:'Clue'},
@@ -4095,7 +4095,7 @@ function HealthImport({ onImport, settings }) {
     samsung:'Samsung Health App → Profil → Daten herunterladen → ZIP auswählen',
     fitbit:'Fitbit → Einstellungen → Daten exportieren → ZIP oder einzelne JSON',
     mfp:'MyFitnessPal → Daten exportieren → diary.csv auswählen',
-    json:'HealthLog → Daten → JSON Backup → Datei auswählen',
+    json:'Vitora → Daten → JSON Backup → Datei auswählen',
     csv:'CSV mit Spalten: date,steps oder date,weight',
     flo:'Flo → Profil → Kontoeinstellungen → Daten exportieren → CSV auswählen',
     clue:'Clue → Einstellungen → Daten exportieren → CSV-Datei auswählen',
@@ -5479,6 +5479,12 @@ function App() {
   // ── Tipp-System: Dismiss-State ────────────────────────────────────────────
   const { dismissed, dismiss } = useDismiss();
 
+  // Letztes bekanntes Gewicht — wird u.a. für die Kalorienschätzung im
+  // Sport-Formular gebraucht (fehlte hier bisher → ReferenceError beim
+  // Öffnen von "Sport" in der Eingabe, da lastWeight nur lokal in
+  // ProfilePanel existierte)
+  const lastWeight = entries.filter(e=>e.type==='gewicht').at(0)?.data.weight;
+
   // Akzentfarbe aus Settings übernehmen (mutiert C vor jedem Render)
   C.accent = settings.accentColor || '#C8B89A';
 
@@ -5653,12 +5659,12 @@ function App() {
       const rows=entries.filter(e=>e.type===key).map(e=>({Datum:e.date,...e.data}));
       if(rows.length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),m.label);
     });
-    XLSX.writeFile(wb,`HealthLog_${toDay()}.xlsx`);
+    XLSX.writeFile(wb,`Vitora_${toDay()}.xlsx`);
   };
 
   const exportJSON = () => {
     const blob=new Blob([JSON.stringify({entries,settings,exported:new Date().toISOString()},null,2)],{type:'application/json'});
-    Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`HealthLog_${toDay()}.json`}).click();
+    Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`Vitora_${toDay()}.json`}).click();
   };
 
   const dayStr = new Date().toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long'});
@@ -6929,7 +6935,7 @@ function App() {
       <header style={{flexShrink:0,padding:`calc(16px + ${top}) 20px 12px`,borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div style={{fontFamily:"'DM Serif Display',Georgia,serif",fontSize:22,fontWeight:400,letterSpacing:0.3}}>
-            Health<span style={{color:C.accent}}>Log</span>
+            Vit<span style={{color:C.accent}}>ora</span>
           </div>
           <button onClick={()=>setShowProfile(true)}
             style={{width:34,height:34,borderRadius:'50%',border:`1.5px solid ${C.border}`,
@@ -6942,7 +6948,7 @@ function App() {
         </div>
         <div style={{fontSize:10,color:C.faint,marginTop:3,letterSpacing:0.4,display:'flex',justifyContent:'space-between'}}>
           <span>{entries.length} Einträge · lokal</span>
-          <span>v7.3</span>
+          <span>v7.4</span>
         </div>
       </header>
 
